@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+model User {
+  id       String @id @default(uuid())
+  email    String @unique
+  password String
+
+  role Role @default(STUDENT)
+
+  isEmailVerified    Boolean  @default(false)
+  emailVerifyToken   String?
+  emailVerifyExpires DateTime?
+
+  resetPasswordToken   String?
+  resetPasswordExpires DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+
+  student Student?
+  teacher Teacher?
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+
+  userId String
+  user   User @relation(fields: [userId],references: [id],onDelete: Cascade)
+
+  expiresAt DateTime
+  revoked  Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  userAgent String?
+  ipAddress String?
+
+  revokedAt DateTime?
+}
+
+// SECTION
+
+model Section {
+  id           String   @id @default(uuid())
+  name         String
+  branch       String
+  semester     Int
+  academicYear String
+
+  students            Student[]
+  teachingAssignments TeachingAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, branch, semester, academicYear])
+}
+
+
+// STUDENT
+
+model Student {
+  id        String @id @default(uuid())
+  studentId String @unique
+  name      String
+  collegeEmail String @unique
+  userId String? @unique
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  sectionId String
+  section   Section @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sectionId])
+}
+
+
+// TEACHER
+
+model Teacher {
+  id        String @id @default(uuid())
+  teacherId String @unique
+  name      String
+  collegeEmail String @unique
+  userId String? @unique
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  teachingAssignments TeachingAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// SUBJECT
+
+model Subject {
+  id   String @id @default(uuid())
+  code String @unique
+  name String
+
+  teachingAssignments TeachingAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// TEACHING ASSIGNMENT
+
+model TeachingAssignment {
+  id String @id @default(uuid())
+
+  teacherId String
+  subjectId String
+  sectionId String
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+
+  academicYear String
+  semester     Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teacherId, subjectId, sectionId, academicYear, semester])
+
+  @@index([teacherId])
+  @@index([subjectId])
+  @@index([sectionId])
+}

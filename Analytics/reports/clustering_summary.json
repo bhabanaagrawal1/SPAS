@@ -1,0 +1,12 @@
+{
+  "algorithm": "GMM",
+  "k": 2,
+  "silhouette": 0.3434151868964858,
+  "davies_bouldin": 1.5470634512401904,
+  "stability_ari": 1.0,
+  "minimum_cluster_fraction": 0.10972222222222222,
+  "cluster_sizes": {
+    "0": 6410,
+    "1": 790
+  }
+}

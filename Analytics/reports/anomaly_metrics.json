@@ -1,0 +1,7 @@
+{
+  "best_model": "IsolationForest",
+  "roc_auc": 0.9868112038622525,
+  "average_precision": 0.6769604098670725,
+  "precision_at_180": 0.6111111111111112,
+  "recall_at_180": 0.5729166666666666
+}
