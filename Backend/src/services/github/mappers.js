@@ -28,6 +28,10 @@ export const mapRepository = (repo) => ({
   openIssues: repo.open_issues_count,
   visibility: repo.visibility,
   isFork: repo.fork,
+  archived: Boolean(repo.archived),
+  topics: repo.topics ?? [],
+  homepage: repo.homepage || null,
+  pushedAt: repo.pushed_at ?? null, // last time code was pushed (updatedAt also changes on stars, issues...)
   updatedAt: repo.updated_at,
   createdAt: repo.created_at,
 });
@@ -38,6 +42,7 @@ export const mapActivity = (event) => ({
   repo: event.repo?.name,
   createdAt: event.created_at,
   action: event.payload?.action || null,
+  refType: event.payload?.ref_type ?? null, // CreateEvent: "repository" | "branch" | "tag"
   commits: event.payload?.commits?.length || 0,
 });
 

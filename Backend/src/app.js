@@ -5,6 +5,7 @@ import authRoutes from "./routes/5.auth.routes.js"
 import githubRoutes from "./routes/github.routes.js";
 import cookieParser from "cookie-parser";
 import { errorHandler } from "./middleware/14.errorHandler.js";
+import codingProfileRoutes from "./routes/codingProfile.routes.js";
 
 //creates Express application
 const app = express();
@@ -36,6 +37,7 @@ app.use(cookieParser());
 // Authentication routes
 app.use("/api/auth", authRoutes);
 app.use("/api/github", githubRoutes);
+app.use("/api/coding-profiles", codingProfileRoutes);
 app.use(errorHandler);
 
 

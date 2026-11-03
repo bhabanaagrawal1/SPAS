@@ -7,7 +7,8 @@
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "dev": "nodemon ./src/server.js",
-    "cleanup": "node scripts/cleanup.js"
+    "cleanup": "node scripts/cleanup.js",
+    "worker:coding": "node src/workers/runCodingSync.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -20,15 +21,18 @@
     "@prisma/client": "^7.10.0",
     "axios": "^1.21.0",
     "bcryptjs": "^3.0.3",
+    "bullmq": "^6.5.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^18.0.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.2",
     "express-validator": "^7.3.2",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.6.0",
     "pg": "^8.23.0",
+    "redis": "^6.3.1",
     "resend": "^6.28.1"
   },
   "devDependencies": {

@@ -30,6 +30,19 @@ const githubLimiter = rateLimit({
 });
 router.use(githubLimiter);
 
+// Every "new ideas" request costs AI quota, so it gets its own, stricter limit.
+const recommendationsLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 20, // 20 per hour per user
+  keyGenerator: (req) => String(req.user.id),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: "TOO_MANY_REQUESTS", message: "You have asked for many ideas. Please try again later." },
+  },
+});
+
 /* Monitoring (admin only) */
 router.get("/rate-limit", requireAdmin, github.getRateLimitStatus);
 
@@ -40,6 +53,7 @@ router.get("/:username/languages", github.getLanguages);
 router.get("/:username/activity", github.getActivity);
 router.get("/:username/activity/monthly", github.getMonthlyActivity);
 router.get("/:username/contributions", github.getContributions);
+router.get("/:username/recommendations", recommendationsLimiter, github.getRecommendations);
 
 /* Per-repository data */
 router.get("/:username/repositories/:repository/commits", github.getCommits);

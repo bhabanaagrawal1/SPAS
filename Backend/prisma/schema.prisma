@@ -19,7 +19,7 @@ model User {
 
   role Role @default(STUDENT)
 
-  isEmailVerified    Boolean  @default(false)
+  isEmailVerified    Boolean   @default(false)
   emailVerifyToken   String?
   emailVerifyExpires DateTime?
 
@@ -36,14 +36,14 @@ model User {
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  tokenHash String   @unique
+  id        String @id @default(uuid())
+  tokenHash String @unique
 
   userId String
-  user   User @relation(fields: [userId],references: [id],onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   expiresAt DateTime
-  revoked  Boolean  @default(false)
+  revoked   Boolean  @default(false)
 
   createdAt DateTime @default(now())
 
@@ -56,7 +56,7 @@ model RefreshToken {
 // SECTION
 
 model Section {
-  id           String   @id @default(uuid())
+  id           String @id @default(uuid())
   name         String
   branch       String
   semester     Int
@@ -71,19 +71,18 @@ model Section {
   @@unique([name, branch, semester, academicYear])
 }
 
-
 // STUDENT
 
 model Student {
-  id        String @id @default(uuid())
-  studentId String @unique
-  name      String
-  collegeEmail String @unique
-  userId String? @unique
-  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  sectionId String
-  section   Section @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  id             String          @id @default(uuid())
+  studentId      String          @unique
+  name           String
+  collegeEmail   String          @unique
+  userId         String?         @unique
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  codingAccounts CodingAccount[]
+  sectionId      String
+  section        Section         @relation(fields: [sectionId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -91,16 +90,15 @@ model Student {
   @@index([sectionId])
 }
 
-
 // TEACHER
 
 model Teacher {
-  id        String @id @default(uuid())
-  teacherId String @unique
-  name      String
-  collegeEmail String @unique
-  userId String? @unique
-  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id           String  @id @default(uuid())
+  teacherId    String  @unique
+  name         String
+  collegeEmail String  @unique
+  userId       String? @unique
+  user         User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   teachingAssignments TeachingAssignment[]
 
@@ -141,8 +139,98 @@ model TeachingAssignment {
   updatedAt DateTime @updatedAt
 
   @@unique([teacherId, subjectId, sectionId, academicYear, semester])
-
   @@index([teacherId])
   @@index([subjectId])
   @@index([sectionId])
+}
+
+enum CodingPlatform {
+  CODEFORCES
+  LEETCODE
+  CODECHEF
+  GEEKSFORGEEKS
+  HACKERRANK
+}
+
+enum CodingSyncStatus {
+  PENDING // linked, first sync not finished yet
+  OK // last sync succeeded
+  ERROR // last sync failed (old data, if any, is still shown)
+  INVALID_HANDLE // the platform says this handle does not exist
+}
+
+model CodingAccount {
+  id        String         @id @default(uuid())
+  studentId String
+  student   Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  platform  CodingPlatform
+  handle    String // as the student typed it (shown in the UI)
+  handleKey String // lowercase, used for uniqueness
+
+  // ---- sync state ----
+  syncStatus          CodingSyncStatus @default(PENDING)
+  syncRequestedAt     DateTime? // set when a sync is queued, cleared when it finishes
+  lastAttemptAt       DateTime?
+  lastSyncedAt        DateTime?
+  lastError           String?
+  consecutiveFailures Int              @default(0)
+  nextSyncAt          DateTime? // the scheduler picks accounts whose nextSyncAt has passed
+
+  // ---- latest totals, kept as plain columns so SQL can sort/aggregate across a section ----
+  problemsSolved   Int  @default(0)
+  contestsAttended Int  @default(0)
+  currentRating    Int?
+  maxRating        Int?
+
+  connectedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ratingPoints CodingRatingPoint[]
+  activityDays CodingActivityDay[]
+  tagStats     CodingTagStat[]
+  solvedSet    CodingSolvedSet?
+
+  @@unique([studentId, platform]) // one handle per platform per student
+  @@unique([platform, handleKey]) // a handle can belong to only one student
+  @@index([nextSyncAt])
+}
+
+// One row per rated contest (rating history).
+model CodingRatingPoint {
+  accountId   String
+  account     CodingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  occurredAt  DateTime
+  contestName String
+  rating      Int
+
+  @@id([accountId, occurredAt])
+}
+
+// One row per day with activity (submissions). Kept beyond the 364-day window the UI shows.
+model CodingActivityDay {
+  accountId String
+  account   CodingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  day       DateTime      @db.Date
+  count     Int
+
+  @@id([accountId, day])
+}
+
+// Problems solved per platform tag (mapped to Arrays/DP/... when reading, so the mapping can change).
+model CodingTagStat {
+  accountId String
+  account   CodingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tag       String
+  solved    Int
+
+  @@id([accountId, tag])
+}
+
+// Solved problem ids (Codeforces only), used to avoid recommending solved problems.
+// Separate table so the big array is never loaded with the account row.
+model CodingSolvedSet {
+  accountId String        @id
+  account   CodingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  keys      String[]
+  updatedAt DateTime      @updatedAt
 }

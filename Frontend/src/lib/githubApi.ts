@@ -2,6 +2,7 @@
  * Everything the dashboard needs from your backend (/api/github/...).
  * Endpoints return { success: true, data } or { success: false, error: { code, message } }.
  */
+
 // Set VITE_API_URL in frontend/.env, e.g. VITE_API_URL=http://localhost:5000
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:5000";
 
@@ -10,7 +11,7 @@ const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "http:/
 // or a fetch wrapper that attaches it (and refreshes it when expired), use that inside request().
 const getAccessToken = (): string | null => localStorage.getItem("accessToken");
 
-/* types*/
+/* ------------------------------- types ------------------------------------ */
 
 export type GitHubProfile = {
   username: string;
@@ -39,9 +40,32 @@ export type GitHubRepository = {
   openIssues: number;
   visibility: string;
   isFork: boolean;
+  archived: boolean;
+  topics: string[];
+  homepage: string | null;
+  pushedAt: string | null;
   updatedAt: string;
   createdAt: string;
 };
+
+export type GitHubActivityEvent = {
+  id: string;
+  type: string; // "PushEvent", "CreateEvent", "PullRequestEvent", ...
+  repo: string | undefined; // "owner/name"
+  createdAt: string;
+  action: string | null;
+  refType: string | null;
+  commits: number;
+};
+
+export type ProjectIdea = {
+  title: string;
+  tag: string; // "Advanced" | "Challenging" | "Ambitious"
+  description: string;
+  tech: string[];
+};
+
+export type Recommendations = { ideas: ProjectIdea[]; generatedAt: string };
 
 export type LanguageShare = { language: string; bytes: number; percentage: number };
 
@@ -80,7 +104,7 @@ export type MonthlyActivity = {
   issues: number;
 };
 
-/* errors*/
+/* ------------------------------- errors ----------------------------------- */
 
 export class GitHubApiError extends Error {
   code: string;
@@ -94,7 +118,7 @@ export class GitHubApiError extends Error {
   }
 }
 
-/* requests */
+/* ------------------------------- requests --------------------------------- */
 
 async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   const token = getAccessToken();
@@ -136,6 +160,13 @@ export const githubApi = {
   repositories: (username: string, signal?: AbortSignal) =>
     request<GitHubRepository[]>(`/${enc(username)}/repositories`, signal),
 
+  activity: (username: string, signal?: AbortSignal) =>
+    request<GitHubActivityEvent[]>(`/${enc(username)}/activity`, signal),
+
+  // refresh = true asks the backend for NEW ideas instead of the cached ones.
+  recommendations: (username: string, refresh: boolean, signal?: AbortSignal) =>
+    request<Recommendations>(`/${enc(username)}/recommendations${refresh ? "?refresh=1" : ""}`, signal),
+
   languages: (username: string, signal?: AbortSignal) =>
     request<LanguageShare[]>(`/${enc(username)}/languages`, signal),
 
@@ -155,7 +186,7 @@ export const githubApi = {
     request<GitHubPullRequest[]>(`/${enc(username)}/repositories/${enc(repo)}/pull-requests`, signal),
 };
 
-/* "recent activity" across repositories */
+/* ------------------- "recent activity" across repositories ----------------- */
 
 // GitHub has no "latest commits / issues across all my repos" endpoint, so the dashboard
 // asks for the few most recently updated repositories and merges the results.

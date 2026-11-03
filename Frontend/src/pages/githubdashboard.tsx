@@ -35,7 +35,6 @@ import {
 } from "recharts";
 import { Link } from "react-router-dom";
 
-// Adjust these three import paths if you place the files elsewhere.
 import { GitHubApiError, githubApi, loadRecentActivity } from "@/lib/githubApi";
 import type {
   Contributions,
@@ -56,7 +55,10 @@ import {
   parseGitHubUsername,
   timeAgo,
 } from "@/lib/githubFormat";
+import { MAX_PINNED } from "@/lib/pinnedProjects";
+import type { Project } from "@/lib/projectsFormat";
 import { useAsync } from "@/hooks/useAsync";
+import { usePinnedProjects } from "@/hooks/usePinnedProjects";
 import type { AsyncState } from "@/hooks/useAsync";
 
 
@@ -95,25 +97,6 @@ const writeStoredUsername = (username: string | null) => {
   }
 };
 
-
-// UI-only for now: "My Projects" has no backend connection yet.
-const initialProjects = [
-  {
-    name: "campus-connect",
-    description: "Campus Event Platform",
-    linked: true,
-  },
-  {
-    name: "portfolio-v2",
-    description: "Personal Portfolio",
-    linked: false,
-  },
-  {
-    name: "study-buddy-api",
-    description: "Study Buddy Platform",
-    linked: false,
-  },
-];
 
 const HEATMAP_LEVEL_CLASSES = [
   "bg-blue-50",
@@ -1197,7 +1180,7 @@ function LanguageCard({ state }: { state: AsyncState<LanguageShare[]> }) {
   // Top 5 languages; everything else is grouped as "Other" so the bar still adds up to 100%.
   const languages = useMemo(() => {
     const all = state.data ?? [];
-    const top = all.slice(0, 5).map((item) => ({
+    const top = all.slice(0, 3).map((item) => ({
       name: item.language,
       color: languageColor(item.language),
       percent: Math.round(item.percentage * 10) / 10,
@@ -1273,64 +1256,91 @@ function LanguageCard({ state }: { state: AsyncState<LanguageShare[]> }) {
 }
 
 
+const AVAILABLE_PREVIEW = 3;
+
+// Repositories that are not in My Projects yet. "Link Project" adds the repository's card to
+// My Projects (which shows at most 6; linking a 7th moves the oldest one back to this list).
 function LinkedProjects({
-  linkedProjects,
-  onLinkProject,
+  loading,
+  error,
+  available,
+  pinnedCount,
+  notice,
+  onLink,
 }: {
-  linkedProjects: string[];
-  onLinkProject: (name: string) => void;
+  loading: boolean;
+  error: Error | null;
+  available: Project[];
+  pinnedCount: number;
+  notice: string | null;
+  onLink: (id: number) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? available : available.slice(0, AVAILABLE_PREVIEW);
+
   return (
     <Card>
       <SectionTitle icon={Link2} title="Linked Projects" />
 
       <p className="-mt-3 mb-3 text-[13px] text-slate-400">
-        Connect repositories to your projects in My Projects
+        Repositories not in My Projects yet. Link one to add it ({pinnedCount} of{" "}
+        {MAX_PINNED} shown in My Projects)
       </p>
 
-      <div className="space-y-1">
-        {initialProjects.map((project) => {
-          const linked = linkedProjects.includes(project.name);
+      {notice && (
+        <p role="status" className="mb-2 text-[13px] text-emerald-600">
+          {notice}
+        </p>
+      )}
 
-          return (
-            <div
-              key={project.name}
-              className="flex min-w-0 items-center gap-2 border-t border-slate-100 py-3 first:border-t-0"
-            >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-300">
-                <Folder size={18} />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold text-slate-800">
-                  {project.name}
-                </p>
-                <p className="mt-1 truncate text-[13px] text-slate-400">
-                  {project.description}
-                </p>
-              </div>
-
-              <button
-                onClick={() => onLinkProject(project.name)}
-                className={`shrink-0 rounded-lg border px-3 py-1.5 text-[15px] transition ${
-                  linked
-                    ? "border-emerald-100 bg-emerald-50 text-emerald-600"
-                    : "border-blue-300 text-blue-400 hover:bg-blue-50"
-                }`}
+      {loading ? (
+        <Loading rows={3} />
+      ) : error ? (
+        <Notice>{errorText(error)}</Notice>
+      ) : available.length === 0 ? (
+        <Notice>Every repository is already in My Projects.</Notice>
+      ) : (
+        <>
+          <div className="space-y-1">
+            {visible.map((project) => (
+              <div
+                key={project.id}
+                className="flex min-w-0 items-center gap-2 border-t border-slate-100 py-3 first:border-t-0"
               >
-                {linked ? (
-                  <span className="flex items-center gap-1">
-                    <Check size={13} />
-                    Linked
-                  </span>
-                ) : (
-                  "Link Project"
-                )}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-300">
+                  <Folder size={18} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold text-slate-800">
+                    {project.name}
+                  </p>
+                  <p className="mt-1 truncate text-[13px] text-slate-400">
+                    {project.description || project.technologies[0] || "No description"}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => onLink(project.id)}
+                  className="shrink-0 rounded-lg border border-blue-300 px-3 py-1.5 text-[15px] text-blue-400 transition hover:bg-blue-50"
+                >
+                  Link Project
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {available.length > AVAILABLE_PREVIEW && (
+            <button
+              onClick={() => setShowAll((value) => !value)}
+              className="mt-2 inline-flex items-center gap-1 text-[14px] font-medium text-blue-300 hover:text-blue-400"
+            >
+              {showAll ? "Show fewer" : `Show all (${available.length})`}
+              <ArrowRight size={15} />
+            </button>
+          )}
+        </>
+      )}
     </Card>
   );
 }
@@ -1378,17 +1388,6 @@ function ProTip() {
 function DashboardBody({ username }: { username: string }) {
   const [year, setYear] = useState(new Date().getFullYear());
 
-  // UI-only until "My Projects" is connected to a backend.
-  const [linkedProjects, setLinkedProjects] = useState<string[]>([]);
-
-  const toggleLinkedProject = (name: string) => {
-    setLinkedProjects((current) =>
-      current.includes(name)
-        ? current.filter((item) => item !== name)
-        : [...current, name],
-    );
-  };
-
   const profile = useAsync((signal) => githubApi.profile(username, signal), [username]);
   const repositories = useAsync((signal) => githubApi.repositories(username, signal), [username]);
   const languages = useAsync((signal) => githubApi.languages(username, signal), [username]);
@@ -1416,6 +1415,36 @@ function DashboardBody({ username }: { username: string }) {
     [username, recentRepoNames.join(",")],
   );
 
+  // Which repositories are shown in My Projects (shared with that page).
+  const { all, pinned, available, link, toggleByName } = usePinnedProjects(
+    username,
+    repositories.data,
+  );
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
+
+  const announce = (text: string) => {
+    setLinkNotice(text);
+    window.setTimeout(() => setLinkNotice(null), 6000);
+  };
+
+  const describeLink = (name: string, replaced: Project | null) =>
+    replaced
+      ? `Added "${name}" to My Projects. "${replaced.name}" moved out to make room (My Projects shows ${MAX_PINNED}).`
+      : `Added "${name}" to My Projects.`;
+
+  const handleLink = (id: number) => {
+    const project = all.find((candidate) => candidate.id === id);
+    const replaced = link(id);
+    if (project) announce(describeLink(project.name, replaced));
+  };
+
+  // The link icon on each repository row does the same thing (and unlinks if already linked).
+  const handleToggleByName = (name: string) => {
+    const wasLinked = pinned.some((project) => project.name === name);
+    const replaced = toggleByName(name);
+    announce(wasLinked ? `Removed "${name}" from My Projects.` : describeLink(name, replaced));
+  };
+
   const recentLoading = repositories.loading || recent.loading;
   const recentError = repositories.error ?? recent.error;
   const profileUrl = profile.data?.profileUrl ?? `https://github.com/${username}`;
@@ -1431,8 +1460,8 @@ function DashboardBody({ username }: { username: string }) {
         <div className="grid grid-cols-1 gap-4">
           <RepositoriesCard
             state={repositories}
-            linkedProjects={linkedProjects}
-            onLinkProject={toggleLinkedProject}
+            linkedProjects={pinned.map((project) => project.name)}
+            onLinkProject={handleToggleByName}
           />
         </div>
 
@@ -1441,8 +1470,12 @@ function DashboardBody({ username }: { username: string }) {
 
           <div id="linked-projects" className="min-w-0">
             <LinkedProjects
-              linkedProjects={linkedProjects}
-              onLinkProject={toggleLinkedProject}
+              loading={repositories.loading}
+              error={repositories.error}
+              available={available}
+              pinnedCount={pinned.length}
+              notice={linkNotice}
+              onLink={handleLink}
             />
           </div>
         </div>

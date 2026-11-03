@@ -13,6 +13,7 @@ const {
   getGitHubLanguages,
   getGitHubCommits,
   getGitHubIssues,
+  getGitHubActivity,
   setCache,
   MemoryCache,
   toGitHubError,
@@ -201,5 +202,29 @@ describe("repository endpoints", () => {
     });
     const issues = await getGitHubIssues("octocat", "repo");
     expect(issues.map((i) => i.number)).toEqual([1]);
+  });
+});
+
+describe("repository and activity mapping", () => {
+  it("exposes archived, pushedAt, topics and homepage", async () => {
+    get.mockResolvedValue({
+      data: [{ id: 1, name: "app", archived: true, pushed_at: "2026-01-01T00:00:00Z", topics: ["react"], homepage: "" }],
+    });
+    const [repo] = await getGitHubRepositories("octocat");
+    expect(repo).toMatchObject({ archived: true, pushedAt: "2026-01-01T00:00:00Z", topics: ["react"], homepage: null });
+  });
+
+  it("falls back safely when GitHub omits those fields", async () => {
+    get.mockResolvedValue({ data: [{ id: 2, name: "old" }] });
+    const [repo] = await getGitHubRepositories("octocat");
+    expect(repo).toMatchObject({ archived: false, pushedAt: null, topics: [], homepage: null });
+  });
+
+  it("includes the CreateEvent ref type in activity", async () => {
+    get.mockResolvedValue({
+      data: [{ id: "1", type: "CreateEvent", repo: { name: "octocat/app" }, created_at: "2026-01-01", payload: { ref_type: "branch" } }],
+    });
+    const [event] = await getGitHubActivity("octocat");
+    expect(event).toMatchObject({ type: "CreateEvent", repo: "octocat/app", refType: "branch" });
   });
 });

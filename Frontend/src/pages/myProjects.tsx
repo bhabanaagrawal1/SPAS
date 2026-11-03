@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -8,9 +8,10 @@ import {
   Code2,
   ExternalLink,
   Folder,
-  GitBranch,
+  GitFork,
   Layers3,
   Lightbulb,
+  Link2,
   MoreVertical,
   Plus,
   Search,
@@ -20,110 +21,35 @@ import {
   CircleHelp,
 } from "lucide-react";
 
-type Status = "Completed" | "In Progress" | "Archived";
-type Project = {
-  id: number;
-  name: string;
-  description: string;
-  status: Status;
-  technologies: string[];
-  stars: string;
-  commits: number;
-  visual: "dashboard" | "github" | "mobile" | "mountain" | "commerce" | "blog";
-};
-const initialProjects: Project[] = [
-  {
-    id: 1,
-    name: "Student 360° Dashboard",
-    description:
-      "A web application for academic performance, coding progress, and personal growth.",
-    status: "Completed",
-    technologies: ["React", "Node.js", "PostgreSQL", "Tailwind"],
-    stars: "3.2k",
-    commits: 12,
-    visual: "dashboard",
-  },
-  {
-    id: 2,
-    name: "GitHub Portfolio",
-    description:
-      "A personal portfolio website with GitHub integration and project showcase.",
-    status: "In Progress",
-    technologies: ["React", "TypeScript", "G-API", "Tailwind"],
-    stars: "1.4k",
-    commits: 8,
-    visual: "github",
-  },
-  {
-    id: 3,
-    name: "Task Management App",
-    description:
-      "A productivity app to manage tasks, set goals and track progress with deadlines.",
-    status: "In Progress",
-    technologies: ["React", "Firebase", "Tailwind", "Redux"],
-    stars: "892",
-    commits: 5,
-    visual: "mobile",
-  },
-  {
-    id: 4,
-    name: "Weather Dashboard",
-    description:
-      "A weather app with real-time data, location search and a 5-day forecast.",
-    status: "Completed",
-    technologies: ["React", "OW-API", "Tailwind", "Axios"],
-    stars: "678",
-    commits: 7,
-    visual: "mountain",
-  },
-  {
-    id: 5,
-    name: "E-commerce Website",
-    description:
-      "A modern e-commerce platform with product catalog, cart and user authentication.",
-    status: "In Progress",
-    technologies: ["Next.js", "Stripe", "PostgreSQL", "Tailwind"],
-    stars: "1.2k",
-    commits: 15,
-    visual: "commerce",
-  },
-  {
-    id: 6,
-    name: "Blog Platform",
-    description:
-      "A simple blog platform with markdown support and an admin dashboard.",
-    status: "Archived",
-    technologies: ["Next.js", "MongoDB", "Tailwind", "MDX"],
-    stars: "540",
-    commits: 9,
-    visual: "blog",
-  },
-];
-const stack = [
-  ["React", "✳", "text-sky-500"],
-  ["Node.js", "◉", "text-emerald-600"],
-  ["TypeScript", "▣", "text-blue-600"],
-  ["Python", "⌘", "text-amber-500"],
-  ["MongoDB", "◉", "text-green-600"],
-  ["PostgreSQL", "◈", "text-sky-600"],
-  ["Tailwind CSS", "≋", "text-cyan-500"],
-  ["Firebase", "ϟ", "text-orange-500"],
-];
-const activity = [
-  ["Updated Student 360° Dashboard", "2 hours ago", "bg-blue-500"],
-  ["Added new feature to Blog Platform", "5 hours ago", "bg-blue-500"],
-  ["Created new repository on GitHub", "1 day ago", "bg-rose-500"],
-  ["Completed Weather Dashboard", "2 days ago", "bg-emerald-500"],
-  ["Pushed changes to E-commerce", "3 days ago", "bg-slate-500"],
-];
-const ideas = [
+import { githubApi } from "@/lib/githubApi";
+import type { ProjectIdea } from "@/lib/githubApi";
+import {
+  describeConnectError,
+  readStoredUsername,
+  writeStoredUsername,
+} from "@/lib/githubConnection";
+import { parseGitHubUsername } from "@/lib/githubFormat";
+import { MAX_PINNED } from "@/lib/pinnedProjects";
+import {
+  artworkFor,
+  buildActivity,
+  buildActivityFromRepositories,
+  createdThisMonth,
+  formatCount,
+  technologyCounts,
+} from "@/lib/projectsFormat";
+import type { ArtworkType, Project, Status } from "@/lib/projectsFormat";
+import { useAsync } from "@/hooks/useAsync";
+import { usePinnedProjects } from "@/hooks/usePinnedProjects";
+
+// Shown only when the AI ideas cannot be loaded (no key, quota used up, offline...).
+const FALLBACK_IDEAS: ProjectIdea[] = [
   {
     title: "AI Study Assistant",
     tag: "Trending",
     description:
       "Build an AI-powered study assistant for notes, doubt solving and personalized learning.",
     tech: ["React", "OpenAI", "Node.js"],
-    icon: <Code2 size={16} />,
   },
   {
     title: "Mobile Expense Tracker",
@@ -131,7 +57,6 @@ const ideas = [
     description:
       "A simple mobile app to track daily expenses and manage your budget.",
     tech: ["React Native", "Firebase", "SQLite"],
-    icon: <BookOpen size={16} />,
   },
   {
     title: "DevOps Dashboard",
@@ -139,9 +64,31 @@ const ideas = [
     description:
       "Monitor deployments, system health and CI/CD pipelines in one place.",
     tech: ["Docker", "Kubernetes", "Grafana"],
-    icon: <Layers3 size={16} />,
   },
 ];
+
+const IDEA_ICONS = [
+  <Code2 key="code" size={16} />,
+  <BookOpen key="book" size={16} />,
+  <Layers3 key="layers" size={16} />,
+];
+
+// Symbol and color for the technologies your design already knew; anything else gets a neutral mark.
+const STACK_MARKS: Record<string, [string, string]> = {
+  React: ["✳", "text-sky-500"],
+  "Node.js": ["◉", "text-emerald-600"],
+  TypeScript: ["▣", "text-blue-600"],
+  JavaScript: ["▣", "text-amber-500"],
+  Python: ["⌘", "text-amber-500"],
+  MongoDB: ["◉", "text-green-600"],
+  PostgreSQL: ["◈", "text-sky-600"],
+  "Tailwind CSS": ["≋", "text-cyan-500"],
+  Firebase: ["ϟ", "text-orange-500"],
+};
+const DEFAULT_MARK: [string, string] = ["◆", "text-slate-400"];
+
+const GITHUB_NEW_REPOSITORY_URL = "https://github.com/new";
+
 function Panel({
   children,
   className = "",
@@ -157,7 +104,7 @@ function Panel({
     </section>
   );
 }
-function Artwork({ type }: { type: Project["visual"] }) {
+function Artwork({ type }: { type: ArtworkType }) {
   if (type === "github")
     return (
       <div className="flex h-full items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-white">
@@ -255,60 +202,206 @@ function StatusBadge({ status }: { status: Status }) {
   );
 }
 
+// Shown until the student connects a GitHub account (also used to change the account).
+function ConnectGitHubPanel({
+  currentUsername,
+  onConnected,
+  onCancel,
+}: {
+  currentUsername: string | null;
+  onConnected: (username: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(currentUsername ?? "");
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const username = parseGitHubUsername(value);
+    if (!username) {
+      setError(
+        "Enter a valid GitHub username or profile link, e.g. octocat or https://github.com/octocat",
+      );
+      return;
+    }
+
+    setChecking(true);
+    setError(null);
+
+    try {
+      // Make sure the account exists before saving it.
+      const profile = await githubApi.profile(username);
+      onConnected(profile.username);
+    } catch (caught) {
+      setError(describeConnectError(caught, username));
+      setChecking(false);
+    }
+  };
+
+  return (
+    <Panel className="p-5">
+      <h2 className="flex items-center gap-2 text-[18px] font-semibold text-slate-900">
+        <Code2 size={20} className="text-blue-400" />
+        {currentUsername ? "Change GitHub account" : "Connect your GitHub"}
+      </h2>
+      <p className="mb-4 mt-1 text-[14px] text-slate-500">
+        Your public repositories are shown here as projects. Enter your GitHub
+        username or profile link to get started.
+      </p>
+
+      <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-slate-400 focus-within:border-blue-400">
+          <Link2 size={17} />
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="octocat or https://github.com/octocat"
+            autoFocus
+            spellCheck={false}
+            autoComplete="off"
+            className="w-full min-w-0 bg-transparent text-[14px] text-slate-700 outline-none placeholder:text-slate-400"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={checking}
+          className="rounded-xl bg-blue-400 px-4 py-2.5 text-[14px] font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
+        >
+          {checking ? "Checking..." : currentUsername ? "Update" : "Connect"}
+        </button>
+
+        {currentUsername && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] font-semibold text-slate-600 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+        )}
+      </form>
+
+      {error && (
+        <p role="alert" className="mt-3 text-[13px] text-red-500">
+          {error}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
+function SkeletonCard() {
+  return <div className="h-72 animate-pulse rounded-xl bg-slate-100" aria-busy="true" />;
+}
+
 export default function MyProjects() {
-  const [projects, setProjects] = useState(initialProjects);
+  const [username, setUsername] = useState<string | null>(readStoredUsername);
+  const [showConnect, setShowConnect] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
   const [filter, setFilter] = useState<"All" | Status>("All");
   const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [technologies, setTechnologies] = useState("React, TypeScript");
   const [notice, setNotice] = useState("");
-  const completed = projects.filter((p) => p.status === "Completed").length;
-  const progress = projects.filter((p) => p.status === "In Progress").length;
-  const allTech = projects.flatMap((p) => p.technologies);
+
+  const repositories = useAsync(
+    username ? (signal) => githubApi.repositories(username, signal) : null,
+    [username, reloadKey],
+  );
+  const events = useAsync(
+    username ? (signal) => githubApi.activity(username, signal) : null,
+    [username, reloadKey],
+  );
+
+  // Gemini ideas. "Get New Ideas" asks the backend for a fresh set (refresh = true).
+  const [ideaRequest, setIdeaRequest] = useState({ key: 0, refresh: false });
+  const recommendations = useAsync(
+    username
+      ? (signal) => githubApi.recommendations(username, ideaRequest.refresh, signal)
+      : null,
+    [username, ideaRequest.key],
+  );
+
+  // `all` = every repository of the account, `pinned` = the (max 6) shown as cards below.
+  // The GitHub dashboard's "Linked Projects" card decides what is pinned.
+  const { all, pinned, unlink } = usePinnedProjects(username, repositories.data);
+  const [menuId, setMenuId] = useState<number | null>(null);
+
+  // The four stat cards describe ALL repositories, not just the cards on screen.
+  const completed = all.filter((p) => p.status === "Completed").length;
+  const progress = all.filter((p) => p.status === "In Progress").length;
+  const techCounts = useMemo(() => technologyCounts(all), [all]);
+  const stack = techCounts.slice(0, 8);
+
+  // GitHub's public events feed is often empty (it only covers recent PUBLIC activity),
+  // so fall back to what the repositories themselves show: created / last pushed.
+  const activity = useMemo(() => {
+    const fromEvents = buildActivity(events.data ?? []);
+    return fromEvents.length > 0 ? fromEvents : buildActivityFromRepositories(all);
+  }, [events.data, all]);
+
   const filtered = useMemo(
     () =>
-      projects.filter(
+      pinned.filter(
         (p) =>
           (filter === "All" || p.status === filter) &&
           `${p.name} ${p.description} ${p.technologies.join(" ")}`
             .toLowerCase()
             .includes(search.toLowerCase().trim()),
       ),
-    [projects, filter, search],
+    [pinned, filter, search],
   );
+
+  // Close the card menu on any outside click or Escape.
+  useEffect(() => {
+    if (menuId === null) return;
+    const close = () => setMenuId(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuId]);
+
   function notify(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3000);
   }
-  function addProject(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setProjects((current) => [
-      {
-        id: Date.now(),
-        name: name.trim(),
-        description: description.trim() || "A new project in your workspace.",
-        status: "In Progress",
-        technologies: technologies
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean),
-        stars: "0",
-        commits: 0,
-        visual: "dashboard",
-      },
-      ...current,
-    ]);
-    setName("");
-    setDescription("");
-    setTechnologies("React, TypeScript");
-    setShowForm(false);
+
+  function handleConnected(name: string) {
+    writeStoredUsername(name);
+    setUsername(name);
+    setShowConnect(false);
     setFilter("All");
     setSearch("");
-    notify("Project added to your workspace.");
   }
+
+  async function copyLink(project: Project) {
+    try {
+      await navigator.clipboard.writeText(project.url);
+      notify(`Link to "${project.name}" copied.`);
+    } catch {
+      notify("Could not copy the link. Open the project to copy it from the address bar.");
+    }
+  }
+
+  function removeProject(project: Project) {
+    unlink(project.id);
+    notify(`"${project.name}" removed from My Projects. Link it again from the GitHub dashboard.`);
+  }
+
+  const topTech = techCounts.slice(0, 3).map(([name]) => name);
+
+  // AI ideas when available, the static ideas when Gemini cannot be reached.
+  const usingFallbackIdeas = !recommendations.loading && recommendations.error !== null;
+  const ideas: ProjectIdea[] = recommendations.data?.ideas ?? (usingFallbackIdeas ? FALLBACK_IDEAS : []);
+
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-slate-800">
       <main className="mx-auto max-w-[1600px] px-4 py-5 md:px-7">
@@ -324,14 +417,27 @@ export default function MyProjects() {
               Build, track and showcase your projects. Turn your ideas into
               real-world solutions.
             </p>
+            {username && (
+              <p className="mt-1 text-[13px] text-slate-400">
+                Synced from github.com/{username} ·{" "}
+                <button
+                  onClick={() => setShowConnect((open) => !open)}
+                  className="font-medium text-blue-400 hover:text-blue-500"
+                >
+                  Change account
+                </button>
+              </p>
+            )}
           </div>
-          <button
-  onClick={() => setShowForm(true)}
-  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-400 bg-blue-400 px-3.5 py-2 text-[14px] font-medium text-white shadow-sm transition-colors hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
->
-  <Plus size={17} strokeWidth={2.25} />
-  Add New Project
-</button>
+          <a
+            href={GITHUB_NEW_REPOSITORY_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-400 bg-blue-400 px-3.5 py-2 text-[14px] font-medium text-white shadow-sm transition-colors hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus size={17} strokeWidth={2.25} />
+            Add New Project
+          </a>
         </div>
         {notice && (
           <div
@@ -342,474 +448,471 @@ export default function MyProjects() {
             {notice}
           </div>
         )}
-        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="min-w-0 space-y-4">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+
+        {(!username || showConnect) && (
+          <div className="mb-4">
+            <ConnectGitHubPanel
+              currentUsername={username}
+              onConnected={handleConnected}
+              onCancel={() => setShowConnect(false)}
+            />
+          </div>
+        )}
+
+        {username && (
+          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="min-w-0 space-y-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <Panel className="p-5">
+                  <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-500">
+                    <Folder size={20} />
+                  </div>
+                  <p className="text-[14px] text-slate-500">Total Projects</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    {all.length}
+                  </p>
+                  <p className="mt-2 flex items-center gap-1 text-[14px] font-medium text-emerald-600">
+                    <TrendingUp size={18} /> +{createdThisMonth(all)} this month
+                  </p>
+                </Panel>
+                <Panel className="p-5">
+                  <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-500">
+                    <Code2 size={22} />
+                  </div>
+                  <p className="text-[14px] text-slate-500">Completed</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    {completed}
+                  </p>
+                  <p className="mt-2 text-[14px] text-slate-500">
+                    {Math.round((completed / Math.max(all.length, 1)) * 100)}
+                    % completion rate
+                  </p>
+                  <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                    <div
+                      className="h-1.5 rounded-full bg-blue-400"
+                      style={{
+                        width: `${(completed / Math.max(all.length, 1)) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </Panel>
+                <Panel className="p-5">
+                  <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-400">
+                    <Clock3 size={22} />
+                  </div>
+                  <p className="text-[14px] text-slate-500">In Progress</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    {progress}
+                  </p>
+                  <p className="mt-2 text-[14px] text-slate-500">
+                    {Math.round((progress / Math.max(all.length, 1)) * 100)}%
+                    in progress
+                  </p>
+                  <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                    <div
+                      className="h-1.5 rounded-full bg-blue-400"
+                      style={{
+                        width: `${(progress / Math.max(all.length, 1)) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </Panel>
+                <Panel className="p-5">
+                  <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-500">
+                    <Star size={22} />
+                  </div>
+                  <p className="text-[14px] text-slate-500">Technologies Used</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    {techCounts.length}
+                  </p>
+                  <p className="mt-2 text-[14px] text-slate-500">
+                    {topTech.length === 0
+                      ? "Add topics to your repositories"
+                      : `${topTech.join(", ")}${techCounts.length > topTech.length ? " + more" : ""}`}
+                  </p>
+                </Panel>
+              </div>
+
               <Panel className="p-5">
-                <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-500">
-                  <Folder size={20} />
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-[22px] font-semibold text-slate-900">
+                      Your Projects
+                    </h2>
+                    <p className="mt-1 text-[14px] text-slate-500">
+                      Showing {pinned.length} of {all.length} repositories
+                      {all.length > MAX_PINNED
+                        ? ` (up to ${MAX_PINNED}). Link more from the GitHub dashboard.`
+                        : "."}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(
+                      ["All", "Completed", "In Progress", "Archived"] as const
+                    ).map((item) => (
+                      <button
+                        key={item}
+                        onClick={() => setFilter(item)}
+                        className={`rounded-lg px-4 py-2 text-[13px] font-medium transition ${filter === item ? "bg-blue-400 text-white shadow-sm" : "border border-slate-200 text-slate-600 hover:bg-blue-50"}`}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                    <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2">
+                      <Search size={15} className="text-slate-400" />
+                      <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search projects"
+                        className="w-28 bg-transparent text-[14px] outline-none placeholder:text-slate-400 sm:w-36"
+                      />
+                    </label>
+                  </div>
                 </div>
-                <p className="text-[14px] text-slate-500">Total Projects</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">
-                  {projects.length}
-                </p>
-                <p className="mt-2 flex items-center gap-1 text-[14px] font-medium text-emerald-600">
-                  <TrendingUp size={18} /> +2 this month
-                </p>
+
+                {repositories.loading ? (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                    <SkeletonCard />
+                    <SkeletonCard />
+                    <SkeletonCard />
+                  </div>
+                ) : repositories.error ? (
+                  <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
+                    <p className="text-[16px] font-medium text-slate-700">
+                      Could not load your projects
+                    </p>
+                    <p className="mt-1 text-[13px] text-slate-400">
+                      {repositories.error.message}
+                    </p>
+                    <button
+                      onClick={() => setReloadKey((key) => key + 1)}
+                      className="mt-3 rounded-lg border border-blue-200 px-3 py-2 text-[13px] font-medium text-blue-400 hover:bg-blue-50"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : filtered.length ? (
+                  <div className="grid auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                    {filtered.map((project) => (
+                      <article
+                        key={project.id}
+                        className="group flex h-full flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/60"
+                      >
+                        <div className="relative m-3 mb-0.5 h-45 shrink-0 overflow-hidden rounded-lg">
+                          <Artwork type={artworkFor(project.id)} />
+                          <button
+                            aria-label={`Options for ${project.name}`}
+                            aria-haspopup="menu"
+                            aria-expanded={menuId === project.id}
+                            onClick={() => setMenuId(menuId === project.id ? null : project.id)}
+                            className="absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1.5 text-slate-500 shadow-sm hover:text-blue-400"
+                          >
+                            <MoreVertical size={13} />
+                          </button>
+                          {menuId === project.id && (
+                            <div
+                              role="menu"
+                              className="absolute right-1.5 top-9 z-20 w-52 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-[13px] shadow-lg"
+                            >
+                              <button
+                                role="menuitem"
+                                onClick={() => copyLink(project)}
+                                className="block w-full px-3 py-2 text-left text-slate-600 hover:bg-blue-50"
+                              >
+                                Copy link
+                              </button>
+                              <button
+                                role="menuitem"
+                                onClick={() => removeProject(project)}
+                                className="block w-full px-3 py-2 text-left text-rose-500 hover:bg-rose-50"
+                              >
+                                Remove from My Projects
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-1 flex-col p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="min-w-0 flex-1 truncate text-[15px] font-medium leading-5 text-slate-900">
+                              {project.name}
+                            </h3>
+                            <StatusBadge status={project.status} />
+                          </div>
+                          <p className="mt-2 line-clamp-2 min-h-10 text-[14px] leading-5 text-slate-500">
+                            {project.description || (
+                              <span className="italic text-slate-300">
+                                No description on GitHub
+                              </span>
+                            )}
+                          </p>
+                          <div className="mt-3 flex h-7 flex-wrap gap-1.5 overflow-hidden">
+                            {project.technologies.slice(0, 4).map((tech) => (
+                              <span
+                                key={tech}
+                                className="rounded-full bg-blue-50 px-3 py-1 text-[12px] font-medium text-blue-500"
+                              >
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-3">
+                            <div className="flex items-center gap-3 text-[14px] text-slate-500">
+                              <span className="flex items-center gap-1">
+                                <Star size={14} className="text-amber-500" />
+                                {formatCount(project.stars)}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <GitFork size={14} />
+                                {formatCount(project.forks)} forks
+                              </span>
+                            </div>
+                            <a
+                              href={project.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 text-[14px] font-semibold text-blue-400 hover:text-blue-500"
+                            >
+                              View Project <ArrowRight size={12} />
+                            </a>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
+                    <Folder size={25} className="mx-auto text-slate-300" />
+                    <p className="mt-3 text-[16px] font-medium text-slate-700">
+                      {pinned.length === 0 ? "No projects here yet" : "No projects found"}
+                    </p>
+                    <p className="mt-1 text-[13px] text-slate-400">
+                      {pinned.length === 0
+                        ? all.length === 0
+                          ? "Create a repository on GitHub and it will appear here."
+                          : "Link repositories from the GitHub dashboard to show them here."
+                        : "Try a different search or filter."}
+                    </p>
+                  </div>
+                )}
               </Panel>
-              <Panel className="p-5">
-                <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-500">
-                  <Code2 size={22} />
+
+              <Panel className="bg-gradient-to-br from-blue-50/80 to-blue-50/70 p-5">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-blue-400 shadow-sm">
+                      <Lightbulb size={23} />
+                    </span>
+                    <div>
+                      <h2 className="text-[18px] font-semibold text-slate-900">
+                        Project Recommendations
+                      </h2>
+                      <p className="mt-0.5 text-[14px] text-slate-500">
+                        {usingFallbackIdeas
+                          ? "General ideas (personalised ideas are unavailable right now)"
+                          : "Tougher ideas picked for your skills and interests"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() =>
+                      setIdeaRequest((current) => ({ key: current.key + 1, refresh: true }))
+                    }
+                    disabled={recommendations.loading}
+                    className="rounded-lg border border-blue-200 bg-white/70 px-3 py-2 text-[13px] font-medium text-blue-400 hover:bg-white disabled:opacity-60"
+                  >
+                    {recommendations.loading ? "Thinking..." : "Get New Ideas"}{" "}
+                    <ArrowRight size={13} className="ml-1 inline" />
+                  </button>
                 </div>
-                <p className="text-[14px] text-slate-500">Completed</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">
-                  {completed}
-                </p>
-                <p className="mt-2 text-[14px] text-slate-500">
-                  {Math.round((completed / Math.max(projects.length, 1)) * 100)}
-                  % completion rate
-                </p>
-                <div className="mt-2 h-1.5 rounded-full bg-slate-100">
-                  <div
-                    className="h-1.5 rounded-full bg-blue-400"
-                    style={{
-                      width: `${(completed / Math.max(projects.length, 1)) * 100}%`,
-                    }}
-                  />
+                {usingFallbackIdeas && recommendations.error && (
+                  <p className="mb-3 text-[13px] text-slate-400">
+                    {recommendations.error.message}
+                  </p>
+                )}
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                  {recommendations.loading
+                    ? [0, 1, 2].map((slot) => (
+                        <div
+                          key={slot}
+                          className="h-44 animate-pulse rounded-xl bg-white/70"
+                          aria-busy="true"
+                        />
+                      ))
+                    : ideas.map((idea, index) => (
+                        <article
+                          key={idea.title}
+                          className="rounded-xl border border-white bg-white/90 p-3 shadow-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-100 text-blue-500">
+                              {IDEA_ICONS[index % IDEA_ICONS.length]}
+                            </span>
+                            <div>
+                              <h3 className="text-[14px] font-medium text-slate-800 mb-0">
+                                {idea.title}
+                              </h3>
+                              <span className="text-[13px] text-blue-400">
+                                {idea.tag}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="mt-3 text-[14px] leading-relaxed text-slate-500">
+                            {idea.description}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-1">
+                            {idea.tech.map((tech) => (
+                              <span
+                                key={tech}
+                                className="rounded-full bg-blue-50 px-3 py-1 text-[13px] text-blue-500"
+                              >
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                        </article>
+                      ))}
                 </div>
-              </Panel>
-              <Panel className="p-5">
-                <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-400">
-                  <Clock3 size={22} />
-                </div>
-                <p className="text-[14px] text-slate-500">In Progress</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">
-                  {progress}
-                </p>
-                <p className="mt-2 text-[14px] text-slate-500">
-                  {Math.round((progress / Math.max(projects.length, 1)) * 100)}%
-                  in progress
-                </p>
-                <div className="mt-2 h-1.5 rounded-full bg-slate-100">
-                  <div
-                    className="h-1.5 rounded-full bg-blue-400"
-                    style={{
-                      width: `${(progress / Math.max(projects.length, 1)) * 100}%`,
-                    }}
-                  />
-                </div>
-              </Panel>
-              <Panel className="p-5">
-                <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-500">
-                  <Star size={22} />
-                </div>
-                <p className="text-[14px] text-slate-500">Technologies Used</p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">
-                  {new Set(allTech).size}
-                </p>
-                <p className="mt-2 text-[14px] text-slate-500">
-                  React, Node.js, Python + more
-                </p>
               </Panel>
             </div>
 
-            <Panel className="p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-[22px] font-semibold text-slate-900">
-                    Your Projects
-                  </h2>
-                  <p className="mt-1 text-[14px] text-slate-500">
-                    Manage and track all your projects in one place.
+            <aside className="space-y-4">
+              <Panel className="p-5">
+                <h2 className="mb-3 flex items-center gap-2 text-[16px] font-semibold text-slate-900">
+                  <Zap size={18} className="text-blue-400" /> Quick Actions
+                </h2>
+                {[
+                  {
+                    label: "Create New Project",
+                    icon: <Plus size={16} />,
+                    run: () => window.open(GITHUB_NEW_REPOSITORY_URL, "_blank", "noopener,noreferrer"),
+                  },
+                  {
+                    label: "Import from GitHub",
+                    icon: <Code2 size={16} />,
+                    run: () => setShowConnect(true),
+                  },
+                  {
+                    label: "Browse Templates",
+                    icon: <BookOpen size={16} />,
+                    run: () => notify("Project templates will be added here."),
+                  },
+                  {
+                    label: "View All Repositories",
+                    icon: <ExternalLink size={16} />,
+                    run: () =>
+                      window.open(
+                        `https://github.com/${username}?tab=repositories`,
+                        "_blank",
+                        "noopener,noreferrer",
+                      ),
+                  },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={item.run}
+                    className="flex w-full items-center gap-2 border-b border-slate-100 py-3 text-left text-[14px] text-slate-600 last:border-0 hover:text-blue-500"
+                  >
+                    <span className="text-blue-500">{item.icon}</span>
+                    <span className="flex-1">{item.label}</span>
+                    <ArrowRight size={15} className="text-slate-400" />
+                  </button>
+                ))}
+              </Panel>
+              <Panel className="p-5">
+                <h2 className="mb-4 flex items-center gap-2 text-[16px] font-semibold text-slate-900">
+                  <Layers3 size={18} className="text-blue-500" /> Technology Stack
+                </h2>
+                {repositories.loading ? (
+                  <div className="h-24 animate-pulse rounded-lg bg-slate-100" />
+                ) : stack.length === 0 ? (
+                  <p className="text-[13px] text-slate-400">
+                    Your languages and repository topics will appear here.
                   </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {(
-                    ["All", "Completed", "In Progress", "Archived"] as const
-                  ).map((item) => (
-                    <button
-                      key={item}
-                      onClick={() => setFilter(item)}
-                      className={`rounded-lg px-4 py-2 text-[13px] font-medium transition ${filter === item ? "bg-blue-400 text-white shadow-sm" : "border border-slate-200 text-slate-600 hover:bg-blue-50"}`}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2">
-                    <Search size={15} className="text-slate-400" />
-                    <input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search projects"
-                      className="w-28 bg-transparent text-[14px] outline-none placeholder:text-slate-400 sm:w-36"
-                    />
-                  </label>
-                </div>
-              </div>
-              {filtered.length ? (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                  {filtered.map((project) => (
-                    <article
-                      key={project.id}
-                      className="group overflow-hidden rounded-xl border border-slate-200/90 bg-white transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/60"
-                    >
-                      <div className="relative m-3 mb-0.5 h-45 overflow-hidden rounded-lg">
-                        <Artwork type={project.visual} />
-                        <button
-                          aria-label={`More options for ${project.name}`}
-                          onClick={() =>
-                            notify(
-                              `More actions for "${project.name}" can be connected next.`,
-                            )
-                          }
-                          className="absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1.5 text-slate-500 shadow-sm hover:text-blue-400"
+                ) : (
+                  <div className="space-y-3">
+                    {stack.map(([name, count]) => {
+                      const [mark, color] = STACK_MARKS[name] ?? DEFAULT_MARK;
+                      return (
+                        <div
+                          key={name}
+                          className="flex items-center gap-2.5 text-[14px]"
                         >
-                          <MoreVertical size={13} />
-                        </button>
-                      </div>
-                      <div className="p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-[15px] font-medium leading-5 text-slate-900">
-                            {project.name}
-                          </h3>
-                          <StatusBadge status={project.status} />
-                        </div>
-                        <p className="mt-2 min-h-9 text-[14px] leading-relaxed text-slate-500">
-                          {project.description}
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {project.technologies.map((tech) => (
-                            <span
-                              key={tech}
-                              className="rounded-full bg-blue-50 px-3 py-1 text-[12px] font-medium text-blue-500"
-                            >
-                              {tech}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                          <div className="flex items-center gap-3 text-[14px] text-slate-500">
-                            <span className="flex items-center gap-1">
-                              <Star size={14} className="text-amber-500" />
-                              {project.stars}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <GitBranch size={14} />
-                              {project.commits} commits
-                            </span>
-                          </div>
-                          <button
-                            onClick={() =>
-                              notify(
-                                `Connect "${project.name}" to a project detail page next.`,
-                              )
-                            }
-                            className="flex items-center gap-1 text-[14px] font-semibold text-blue-400 hover:text-blue-500"
+                          <span
+                            className={`grid w-4 place-items-center font-bold ${color}`}
                           >
-                            View Project <ArrowRight size={12} />
-                          </button>
+                            {mark}
+                          </span>
+                          <span className="flex-1 text-slate-600">{name}</span>
+                          <span className="text-slate-500">{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Panel>
+              <Panel className="p-5">
+                <h2 className="mb-4 flex items-center gap-2 text-[18px] font-semibold text-slate-900">
+                  <Clock3 size={18} className="text-blue-400" /> Recent Activity
+                </h2>
+                {events.loading || repositories.loading ? (
+                  <div className="h-32 animate-pulse rounded-lg bg-slate-100" />
+                ) : activity.length === 0 ? (
+                  <p className="text-[13px] text-slate-400">
+                    No activity yet. Create or push to a repository on GitHub.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {activity.map(({ id, title, when, color }) => (
+                      <div key={id} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <span
+                            className={`mt-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-slate-50 ${color}`}
+                          />
+                          <span className="mt-1 w-px flex-1 bg-slate-100" />
+                        </div>
+                        <div className="pb-1">
+                          <p className="text-[14px] font-medium leading-relaxed text-slate-700">
+                            {title}
+                          </p>
+                          <p className="mt-1 text-[13px] text-slate-400">{when}</p>
                         </div>
                       </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center">
-                  <Folder size={25} className="mx-auto text-slate-300" />
-                  <p className="mt-3 text-[16px] font-medium text-slate-700">
-                    No projects found
-                  </p>
-                  <p className="mt-1 text-[13px] text-slate-400">
-                    Try a different search or filter.
-                  </p>
-                </div>
-              )}
-            </Panel>
-
-            <Panel className="bg-gradient-to-br from-blue-50/80 to-blue-50/70 p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-blue-400 shadow-sm">
-                    <Lightbulb size={23} />
-                  </span>
-                  <div>
-                    <h2 className="text-[18px] font-semibold text-slate-900">
-                      Project Recommendations
-                    </h2>
-                    <p className="mt-0.5 text-[14px] text-slate-500">
-                      Ideas based on skills and interests
-                    </p>
+                    ))}
                   </div>
+                )}
+              </Panel>
+              <Panel className="border-blue-100 bg-gradient-to-br from-white to-blue-50/80 p-4">
+                <div className="mb-2 flex items-center gap-2 text-blue-400">
+                  <CircleHelp size={17} />
+                  <h3 className="text-[15px] font-semibold">Pro Tip</h3>
                 </div>
+                <p className="text-[14px] leading-relaxed text-slate-600">
+                  Keep your README updated, add screenshots, and document what you
+                  learned. A polished project is easier to showcase.
+                </p>
                 <button
                   onClick={() =>
                     notify(
-                      "More project recommendations will be available here.",
+                      "README checklist: overview, setup instructions, features, screenshots, and tech stack.",
                     )
                   }
-                  className="rounded-lg border border-blue-200 bg-white/70 px-3 py-2 text-[13px] font-medium text-blue-400 hover:bg-white"
+                  className="mt-3 flex items-center gap-1 text-[14px] font-semibold text-blue-400 hover:text-blue-500"
                 >
-                  View All Suggestions{" "}
-                  <ArrowRight size={13} className="ml-1 inline" />
+                  View README checklist <ArrowUpRight size={14} />
                 </button>
-              </div>
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                {ideas.map((idea) => (
-                  <article
-                    key={idea.title}
-                    className="rounded-xl border border-white bg-white/90 p-3 shadow-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-100 text-blue-500">
-                        {idea.icon}
-                      </span>
-                      <div>
-                        <h3 className="text-[14px] font-medium text-slate-800 mb-0">
-                          {idea.title}
-                        </h3>
-                        <span className="text-[13px] text-blue-400">
-                          {idea.tag}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="mt-3 text-[14px] leading-relaxed text-slate-500">
-                      {idea.description}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {idea.tech.map((tech) => (
-                        <span
-                          key={tech}
-                          className="rounded-full bg-blue-50 px-3 py-1 text-[13px] text-blue-500"
-                        >
-                          {tech}
-                        </span>
-                      ))}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </Panel>
+              </Panel>
+            </aside>
           </div>
-
-          <aside className="space-y-4">
-            <Panel className="p-5">
-              <h2 className="mb-3 flex items-center gap-2 text-[16px] font-semibold text-slate-900">
-                <Zap size={18} className="text-blue-400" /> Quick Actions
-              </h2>
-              {[
-                {
-                  label: "Create New Project",
-                  icon: <Plus size={16} />,
-                  run: () => setShowForm(true),
-                },
-                {
-                  label: "Import from GitHub",
-                  icon: <Code2 size={16} />,
-                  run: () =>
-                    notify(
-                      "GitHub import is a placeholder. Connect GitHub to enable it.",
-                    ),
-                },
-                {
-                  label: "Browse Templates",
-                  icon: <BookOpen size={16} />,
-                  run: () => notify("Project templates will be added here."),
-                },
-                {
-                  label: "View All Repositories",
-                  icon: <ExternalLink size={16} />,
-                  run: () =>
-                    notify("Connect GitHub to view your repositories."),
-                },
-              ].map((item) => (
-                <button
-                  key={item.label}
-                  onClick={item.run}
-                  className="flex w-full items-center gap-2 border-b border-slate-100 py-3 text-left text-[14px] text-slate-600 last:border-0 hover:text-blue-500"
-                >
-                  <span className="text-blue-500">{item.icon}</span>
-                  <span className="flex-1">{item.label}</span>
-                  <ArrowRight size={15} className="text-slate-400" />
-                </button>
-              ))}
-            </Panel>
-            <Panel className="p-5">
-              <h2 className="mb-4 flex items-center gap-2 text-[16px] font-semibold text-slate-900">
-                <Layers3 size={18} className="text-blue-500" /> Technology Stack
-              </h2>
-              <div className="space-y-3">
-                {stack.map(([name, mark, color]) => (
-                  <div
-                    key={name}
-                    className="flex items-center gap-2.5 text-[14px]"
-                  >
-                    <span
-                      className={`grid w-4 place-items-center font-bold ${color}`}
-                    >
-                      {mark}
-                    </span>
-                    <span className="flex-1 text-slate-600">{name}</span>
-                    <span className="text-slate-500">
-                      {
-                        allTech.filter((t) =>
-                          t
-                            .toLowerCase()
-                            .includes(name.toLowerCase().replace(" css", "")),
-                        ).length
-                      }
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-            <Panel className="p-5">
-              <h2 className="mb-4 flex items-center gap-2 text-[18px] font-semibold text-slate-900">
-                <Clock3 size={18} className="text-blue-400" /> Recent Activity
-              </h2>
-              <div className="space-y-4">
-                {activity.map(([title, time, color]) => (
-                  <div key={title} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <span
-                        className={`mt-1.5 h-2.5 w-2.5 rounded-full ring-4 ring-slate-50 ${color}`}
-                      />
-                      <span className="mt-1 w-px flex-1 bg-slate-100" />
-                    </div>
-                    <div className="pb-1">
-                      <p className="text-[14px] font-medium leading-relaxed text-slate-700">
-                        {title}
-                      </p>
-                      <p className="mt-1 text-[13px] text-slate-400">{time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-            <Panel className="border-blue-100 bg-gradient-to-br from-white to-blue-50/80 p-4">
-              <div className="mb-2 flex items-center gap-2 text-blue-400">
-                <CircleHelp size={17} />
-                <h3 className="text-[15px] font-semibold">Pro Tip</h3>
-              </div>
-              <p className="text-[14px] leading-relaxed text-slate-600">
-                Keep your README updated, add screenshots, and document what you
-                learned. A polished project is easier to showcase.
-              </p>
-              <button
-                onClick={() =>
-                  notify(
-                    "README checklist: overview, setup instructions, features, screenshots, and tech stack.",
-                  )
-                }
-                className="mt-3 flex items-center gap-1 text-[14px] font-semibold text-blue-400 hover:text-blue-500"
-              >
-                View README checklist <ArrowUpRight size={14} />
-              </button>
-            </Panel>
-          </aside>
-        </div>
+        )}
         <footer className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-4 text-[14px] text-slate-400">
           <span>Student 360° · My Projects</span>
-          <span>Project Data · Commit Changes</span>
+          <span>
+            {username && repositories.data
+              ? `${all.length} ${all.length === 1 ? "repository" : "repositories"} synced from GitHub`
+              : "Project Data · Commit Changes"}
+          </span>
         </footer>
       </main>
-
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="new-project-title"
-            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
-          >
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <h2
-                  id="new-project-title"
-                  className="text-[20px] font-medium text-slate-900"
-                >
-                  Create a project
-                </h2>
-                <p className="mt-1 text-[14px] text-slate-500">
-                  Add a project to your Student 360° workspace.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowForm(false)}
-                className="rounded-full p-2 pt-1 pb-1 text-slate-400 hover:bg-slate-100"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={addProject} className="space-y-4">
-              <label className="block">
-                <span className="mb-1.5 block text-[14px] font-medium text-slate-700">
-                  Project name *
-                </span>
-                <input
-                  required
-                  autoFocus
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. AI Study Assistant"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-[16px] outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-[14px] font-medium text-slate-700">
-                  Image URL
-                </span>
-                <input
-                  required
-                  autoFocus
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Image url"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-[16px] outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-[14px] font-medium text-slate-700">
-                  Description
-                </span>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  placeholder="What does your project do?"
-                  className="w-full resize-y rounded-xl border border-slate-200 px-3 py-2.5 text-[16px] outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-[14px] font-medium text-slate-700">
-                  Technologies (comma-separated)
-                </span>
-                <input
-                  value={technologies}
-                  onChange={(e) => setTechnologies(e.target.value)}
-                  placeholder="React, TypeScript, PostgreSQL"
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-[16px] outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                />
-              </label>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowForm(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-[14px] font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-blue-400 px-4 py-2.5 text-[14px] font-semibold text-white hover:bg-blue-500"
-                >
-                  <Plus size={15} className="mr-1 inline" /> Create Project
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

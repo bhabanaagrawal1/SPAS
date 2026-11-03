@@ -25,13 +25,14 @@ export const settings = Object.freeze({
 
 // Cache lifetime (seconds) per data type.
 export const TTL_SECONDS = Object.freeze({
-  profile: toPositiveInt(config.githubTtlProfile, 15 * 60),
-  repos: toPositiveInt(config.githubTtlRepos, 10 * 60),
-  languages: toPositiveInt(config.githubTtlLanguages, 60 * 60),
-  activity: toPositiveInt(config.githubTtlActivity, 2 * 60),
-  commits: toPositiveInt(config.githubTtlCommits, 5 * 60),
-  issues: toPositiveInt(config.githubTtlIssues, 5 * 60),
-  pulls: toPositiveInt(config.githubTtlPulls, 5 * 60),
-  contributions: toPositiveInt(config.githubTtlContributions, 30 * 60),
-  monthly: toPositiveInt(config.githubTtlMonthly, 60 * 60),
+  profile: toPositiveInt(process.env.GH_TTL_PROFILE, 15 * 60),
+  repos: toPositiveInt(process.env.GH_TTL_REPOS, 10 * 60),
+  languages: toPositiveInt(process.env.GH_TTL_LANGUAGES, 60 * 60),
+  activity: toPositiveInt(process.env.GH_TTL_ACTIVITY, 2 * 60),
+  commits: toPositiveInt(process.env.GH_TTL_COMMITS, 5 * 60),
+  issues: toPositiveInt(process.env.GH_TTL_ISSUES, 5 * 60),
+  pulls: toPositiveInt(process.env.GH_TTL_PULLS, 5 * 60),
+  contributions: toPositiveInt(process.env.GH_TTL_CONTRIBUTIONS, 30 * 60),
+  monthly: toPositiveInt(process.env.GH_TTL_MONTHLY, 60 * 60),
+  recommendations: toPositiveInt(process.env.GH_TTL_RECOMMENDATIONS, 6 * 60 * 60),
 });

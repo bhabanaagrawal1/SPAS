@@ -32,7 +32,7 @@ import {
   mapRepository,
 } from "./github/mappers.js";
 
-/* ----------------------------- helpers ------------------------------------ */
+/* helpers */
 
 const cached = (type, keyParts, loader) =>
   cachedRequest(buildCacheKey(type, ...keyParts), TTL_SECONDS[type], loader);
@@ -48,7 +48,7 @@ const repoPath = (username, repository) => `/repos/${username}/${repository}`;
 // Anything else (rate limit, bad token, GitHub down) must be reported.
 const IGNORABLE_LANGUAGE_ERRORS = new Set([ErrorCode.NOT_FOUND, ErrorCode.EMPTY_REPOSITORY]);
 
-/* ----------------------------- public API --------------------------------- */
+/*  public API*/
 
 export const getGitHubProfile = async (username) => {
   validateUsername(username);

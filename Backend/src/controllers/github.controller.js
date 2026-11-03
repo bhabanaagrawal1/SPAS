@@ -12,6 +12,8 @@ import {
   getGitHubRateLimitStatus,
   getGitHubRepositories,
 } from "../services/github.service.js";
+import { AiError } from "../services/ai/gemini.client.js";
+import { getProjectRecommendations } from "../services/recommendations.service.js";
 
 /*
  * Controllers only translate between HTTP and the service:
@@ -51,6 +53,25 @@ const sendGitHubError = (res, error) => {
   });
 };
 
+// AI failures. A missing/invalid Gemini key is OUR problem: log it, show a generic message.
+const sendAiError = (res, error) => {
+  const { code, status = 503, retryAfter } = error;
+
+  if (code === "AI_CONFIG") {
+    console.error(`[ai] ${code}: ${error.message}`);
+    return res.status(503).json({
+      success: false,
+      error: { code: "AI_UNAVAILABLE", message: "Project ideas are temporarily unavailable." },
+    });
+  }
+
+  if (retryAfter !== undefined) res.set("Retry-After", String(retryAfter));
+  return res.status(status).json({
+    success: false,
+    error: { code, message: error.message, ...(retryAfter !== undefined && { retryAfter }) },
+  });
+};
+
 // Wraps a service call so each controller is one line.
 // GitHubError -> formatted response. Anything else -> your global error handler.
 const handle = (load) => async (req, res, next) => {
@@ -77,6 +98,18 @@ export const getIssues = handle(({ username, repository }) => getGitHubIssues(us
 export const getPullRequests = handle(({ username, repository }) =>
   getGitHubPullRequests(username, repository)
 );
+
+// ?refresh=1 asks for NEW ideas instead of the cached ones.
+export const getRecommendations = async (req, res, next) => {
+  try {
+    const data = await getProjectRecommendations(req.params.username, { refresh: req.query.refresh === "1" });
+    res.json({ success: true, data });
+  } catch (error) {
+    if (error instanceof GitHubError) return sendGitHubError(res, error);
+    if (error instanceof AiError) return sendAiError(res, error);
+    next(error);
+  }
+};
 
 // Monitoring: remaining quota, queue length, active requests. Protect this route (admin only).
 export const getRateLimitStatus = (req, res) => {
