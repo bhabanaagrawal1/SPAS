@@ -90,11 +90,18 @@ const config = {
   codingWorkerConcurrency: process.env.CODING_WORKER_CONCURRENCY,
   codingSchedulerSeconds: process.env.CODING_SCHEDULER_SECONDS,
   redisHost: process.env.REDIS_HOST,
-redisPort: Number(process.env.REDIS_PORT),
-redisUsername: process.env.REDIS_USERNAME || "default",
-redisPassword: process.env.REDIS_PASSWORD,
-redisNamespace: process.env.REDIS_NAMESPACE || "s360",
-activityUtcOffsetMinutes: Number(process.env.ACTIVITY_UTC_OFFSET_MINUTES ?? 330),
+  redisPort: Number(process.env.REDIS_PORT),
+  redisUsername: process.env.REDIS_USERNAME || "default",
+  redisPassword: process.env.REDIS_PASSWORD,
+  redisNamespace: process.env.REDIS_NAMESPACE || "s360",
+  activityUtcOffsetMinutes: Number(process.env.ACTIVITY_UTC_OFFSET_MINUTES ?? 330),
+  codingAiRecommendations: process.env.CODING_AI_RECOMMENDATIONS,
+  codingAiCacheSeconds: process.env.CODING_AI_CACHE_SECONDS,
+  codingAiFallbackCacheSeconds: process.env.CODING_AI_FALLBACK_CACHE_SECONDS,
+  codingAiModels: process.env.CODING_AI_MODELS,
+  codingAiDeadlineMs: process.env.CODING_AI_DEADLINE_MS,
+  codingAiDailyBudget: process.env.CODING_AI_DAILY_BUDGET,
+  codingAiRecommendations: process.env.CODING_AI_RECOMMENDATIONS,
 }
 
 export default Object.freeze(config);

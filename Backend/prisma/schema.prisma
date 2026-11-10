@@ -83,6 +83,8 @@ model Student {
   codingAccounts CodingAccount[]
   sectionId      String
   section        Section         @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  academicRecords AcademicRecord[]
+  cgpaPredictions CGPAPrediction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -233,4 +235,56 @@ model CodingSolvedSet {
   account   CodingAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   keys      String[]
   updatedAt DateTime      @updatedAt
+}
+
+model AcademicRecord {
+  id                         String   @id @default(uuid())
+
+  // References Student.id (the database UUID)
+  studentDbId String
+  student     Student @relation(fields: [studentDbId], references: [id], onDelete: Cascade)
+
+  semester                   Int
+  academicYear               String
+
+  previousSemesterCgpa       Float
+  previousSemesterBacklogs   Int
+
+  attendancePercentage       Float
+  totalClasses               Int
+  attendedClasses            Int
+
+  internalAssessmentMarks    Float
+  midtermMarks               Float
+  quizAverage                Float
+  assignmentAverage          Float
+  assignmentSubmissionRate   Float
+  labAverage                 Float
+  projectMarks               Float
+
+  studyHoursPerDay           Float
+  previousYearPercentage     Float
+
+  isSynthetic                Boolean  @default(false)
+
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@unique([studentDbId, semester, academicYear])
+  @@index([studentDbId])
+}
+
+model CGPAPrediction {
+  id                String   @id @default(uuid())
+
+  studentDbId String
+  student     Student @relation(fields: [studentDbId], references: [id], onDelete: Cascade)
+
+  predictedCgpa     Float
+  modelVersion      String
+  featuresSnapshot  Json
+
+  createdAt         DateTime @default(now())
+
+  @@index([studentDbId, createdAt])
 }

@@ -37,7 +37,9 @@ import type { Dashboard, PlatformCard, PlatformKey, Recommendation } from "@/typ
 const statusText = (p: PlatformCard) => {
   if (!p.connected) return "Connect account";
   if (p.syncing) return "Syncing…";
-  if (p.needsAttention) return "Check username";
+  if (p.syncStatus === "invalid_handle") return "Check username";
+  if (p.syncStatus === "error") return p.needsAttention ? "Sync failed" : "Sync failed, retrying";
+  if (p.syncStatus === "pending") return "Waiting to sync";
   return "Connected";
 };
 
@@ -508,7 +510,7 @@ function DashboardBody({
                   <Link2 size={11} />
                   {statusText(p)}
                 </div>
-                {p.needsAttention && p.lastSyncError && (
+                {p.lastSyncError && p.syncStatus !== "ok" && (
                   <div className="mt-1 text-[11px] leading-snug text-red-500">{p.lastSyncError}</div>
                 )}
               </button>

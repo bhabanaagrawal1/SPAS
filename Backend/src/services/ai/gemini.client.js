@@ -154,6 +154,13 @@ const isRetryable = (error) =>
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const isModelProblem = (error) => {
+  if (error instanceof AiError) return error.code === "AI_BAD_RESPONSE";
+  const status = error.response?.status;
+  const detail = error.response?.data?.error?.message ?? "";
+  return status === 404 || (status === 400 && !/api key/i.test(detail));
+};
+
 // One model, one attempt. Tries the next thinking option only if the model rejects it.
 const requestOnce = async ({ model, apiKey, systemInstruction, prompt, schema }) => {
   let lastError;
@@ -183,19 +190,25 @@ const requestOnce = async ({ model, apiKey, systemInstruction, prompt, schema })
 };
 
 // Generate structured JSON using Gemini, with retry and model fallback.
-export const generateJson = async ({ systemInstruction, prompt, schema }) => {
+export const generateJson = async ({ systemInstruction, prompt, schema, models: modelOverride, deadlineMs }) => {
   const apiKey = config.geminiApiKey;
   if (!apiKey) {
     throw new AiError("AI_CONFIG", "GEMINI_API_KEY is not configured");
   }
 
-  const models = [...new Set([config.geminiModel || DEFAULT_MODEL, FALLBACK_MODEL])];
+  const models = modelOverride?.length
+    ? modelOverride
+    : [...new Set([config.geminiModel || DEFAULT_MODEL, FALLBACK_MODEL])];
+  const begin = Date.now();
   let lastError;
 
-  for (const model of models) {
+  outer: for (const model of models) {
     for (let attempt = 1; attempt <= ATTEMPTS_PER_MODEL; attempt++) {
-      const startedAt = Date.now();
+      // With a deadline: never start an attempt that cannot finish in time, and cap its timeout.
+      const remaining = deadlineMs ? deadlineMs - (Date.now() - begin) : Infinity;
+      if (remaining < 1500) break outer;
 
+      const startedAt = Date.now();
       try {
         const response = await requestOnce({
           model,
@@ -203,6 +216,7 @@ export const generateJson = async ({ systemInstruction, prompt, schema }) => {
           systemInstruction,
           prompt,
           schema,
+          timeoutMs: Math.min(REQUEST_TIMEOUT_MS, remaining),
         });
         const usage = response.data?.usageMetadata;
 
@@ -211,24 +225,29 @@ export const generateJson = async ({ systemInstruction, prompt, schema }) => {
           thinkingTokens: usage?.thoughtsTokenCount ?? 0,
         });
 
-        debug("[ai] Gemini response:", JSON.stringify(response.data, null, 2));
-
         return parseJsonResponse(response.data);
       } catch (error) {
-        if (error instanceof AiError) throw error; // bad/blocked response: retrying won't help
-
         lastError = error;
+
+        // This model cannot do the job: move on to the next one instead of giving up.
+        if (isModelProblem(error) && model !== models[models.length - 1]) {
+          console.warn(`[ai] ${model} unusable (${error.response?.status ?? error.code}), trying the next model`);
+          continue outer;
+        }
+
+        if (error instanceof AiError) throw error; // bad/blocked response on the last model: retrying won't help
+
         console.warn(
           `[ai] ${model} attempt ${attempt} failed after ${Date.now() - startedAt}ms:`,
           error.response?.status ?? error.code,
           error.response?.data?.error?.message ?? error.message
         );
 
-        if (!isRetryable(error)) throw toAiError(error); // e.g. 401, 404, 429
+        if (!isRetryable(error)) throw toAiError(error); // e.g. 401, 403, 429, or a model problem on the last model
         if (attempt < ATTEMPTS_PER_MODEL) await sleep(1000 * attempt);
       }
     }
   }
 
-  throw toAiError(lastError);
+  throw lastError instanceof AiError ? lastError : toAiError(lastError ?? new Error("Gemini deadline reached"));
 };
