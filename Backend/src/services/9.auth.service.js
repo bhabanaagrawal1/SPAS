@@ -28,122 +28,251 @@ async function issueTokenPair({ userId, email,role, userAgent, ipAddress }) {
     return { accessToken, refreshToken };
 }
 
-export async function registerUser({email,password,registrationId}) {
-    // 1. Check whether user already exists
-    const existingUser = await prisma.user.findUnique({
-        where: { email }
-    });
-    if (existingUser) {
-        if (!existingUser.isEmailVerified) { throw new ApiError( 409, "An account already exists with this email. Please verify your email." ); }
-        throw new ApiError(
-            409, // Conflict
-            "An account with this email already exists"
-        );
-    }
 
-    let role; let profileId;
-
-    // try student
-    const student = await prisma.student.findFirst({ where: { studentId: registrationId, collegeEmail: email } });
-
-    if (student) { 
-        if (student.userId) { 
-            throw new ApiError( 409, "This student already has an account" ); 
-        } 
-        role = "STUDENT";
-        profileId = student.id;
-    }
-    else { 
-        const teacher = await prisma.teacher.findFirst({      where: { 
-                    teacherId: registrationId, 
-                    collegeEmail: email, 
-                } 
-        });
-
-        if (!teacher) throw new ApiError(400, "Registration ID and email do not match");
-
-        if (teacher.userId) throw new ApiError(409, "This teacher already has an account");
-
-        role = "TEACHER";
-        profileId = teacher.id;
-    }
+export async function registerUser({ email, password, registrationId }) {
+    // 1. Normalize input
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedRegistrationId = registrationId.trim();
 
     // 2. Hash password
     const hashedPassword = await hashPassword(password);
+
     // 3. Generate email verification token
-    // Think of the token as a temporary secret key sent to the user's email.
     const emailVerifyToken = generateRandomToken();
-    // 4. Create user
-    /**
-     * 1. Why do we need emailVerifyToken?
-     * When a user registers:
-       User enters:          email = abc@gmail.com          password = Password@123
 
-       Your backend cannot automatically know that the user actually owns abc@gmail.com.
+    // Store only the hashed token in the database
+    const hashedEmailVerifyToken = hashToken(emailVerifyToken);
 
-       So your server generates a random token:
-       const emailVerifyToken = generateRandomToken();
+    // 4. Calculate token expiry
+    const emailVerifyExpires = new Date(
+        Date.now() + config.tokenExpiry.emailVerifyMs
+    );
 
-       For example:
-       emailVerifyToken = "X7k92LmP..."
+    let user;
 
-       Then you send an email to:
-       abc@gmail.com
-       containing a verification link such as:
-       https://yourapp.com/api/auth/verify-email?token=X7k92LmP...
-       The user clicks that link.
-       Now your backend receives:
-       token = X7k92LmP...
-
-       and checks whether that token belongs to a user.
-     */
-    /*
-    5. Why do we need an expiry?
-    Imagine you don't have emailVerifyExpires.
-    User registers today:January 1
-
-    They receive: verification token = ABC123
-    But they don't click it.
-    Then imagine they click the same link:
-    6 months later
-
-    If your backend only checks: emailVerifyToken === token
-
-    the old token might still work.
-    That's not what you want.
-
-    You want:
-    Token
-    +
-    Expiry time
-
-    to determine whether verification is allowed.
-     */
-
-    const emailVerifyExpires = new Date( Date.now() + config.tokenExpiry.emailVerifyMs );
-    
-    const user = await prisma.user.create({ data: { email, password: hashedPassword, 
-        // Backend determined this. 
-        // Frontend never sends role. 
-        role, 
-        isEmailVerified: false, 
-        // Store only the hashed token 
-        // in the database. 
-        emailVerifyToken: hashToken(emailVerifyToken), emailVerifyExpires } });
-
-
-    // 5. Send verification email
+    // 5. Create user and link the correct profile atomically
     try {
-    await sendVerificationEmail(user.email, emailVerifyToken);
-  } catch (error) {
-    console.error("Failed to send verification email:", error);
+        user = await prisma.$transaction(async (tx) => {
 
-    // Email could not be sent. // Remove the newly created account.
-     await prisma.user.delete({ where: { id: user.id } }); 
-     throw new ApiError( 500, "Unable to send verification email. Please try again." );
-  }
+            // Check whether an account already exists
+            const existingUser = await tx.user.findUnique({
+                where: { email: normalizedEmail }
+            });
 
-  return { message: "Registration successful. Please verify your email.", user: { id: user.id, email: user.email, role: user.role, isEmailVerified: user.isEmailVerified } };
+            if (existingUser) {
+                if (!existingUser.isEmailVerified) {
+                    throw new ApiError(
+                        409,
+                        "An account already exists with this email. Please verify your email."
+                    );
+                }
+
+                throw new ApiError(
+                    409,
+                    "An account with this email already exists."
+                );
+            }
+
+            let role;
+            let profile;
+
+            // -----------------------------------------
+            // Check whether this is a student
+            // -----------------------------------------
+            const student = await tx.student.findFirst({
+                where: {
+                    studentId: normalizedRegistrationId,
+                    collegeEmail: normalizedEmail
+                }
+            });
+
+            if (student) {
+                if (student.userId) {
+                    throw new ApiError(
+                        409,
+                        "This student already has an account."
+                    );
+                }
+
+                role = "STUDENT";
+                profile = student;
+            }
+
+            // -----------------------------------------
+            // Otherwise, check whether this is a teacher
+            // -----------------------------------------
+            else {
+                const teacher = await tx.teacher.findFirst({
+                    where: {
+                        teacherId: normalizedRegistrationId,
+                        collegeEmail: normalizedEmail
+                    }
+                });
+
+                if (!teacher) {
+                    throw new ApiError(
+                        400,
+                        "Registration ID and email do not match."
+                    );
+                }
+
+                if (teacher.userId) {
+                    throw new ApiError(
+                        409,
+                        "This teacher already has an account."
+                    );
+                }
+
+                role = "TEACHER";
+                profile = teacher;
+            }
+
+            // -----------------------------------------
+            // Create the User account
+            // -----------------------------------------
+            const newUser = await tx.user.create({
+                data: {
+                    email: normalizedEmail,
+                    password: hashedPassword,
+                    role,
+                    isEmailVerified: false,
+                    emailVerifyToken: hashedEmailVerifyToken,
+                    emailVerifyExpires
+                }
+            });
+
+            // -----------------------------------------
+            // Link the User to the existing profile
+            // -----------------------------------------
+            if (role === "STUDENT") {
+
+                const result = await tx.student.updateMany({
+                    where: {
+                        id: profile.id,
+                        userId: null
+                    },
+                    data: {
+                        userId: newUser.id
+                    }
+                });
+
+                if (result.count !== 1) {
+                    throw new ApiError(
+                        409,
+                        "This student profile is already linked to an account."
+                    );
+                }
+            }
+
+            else if (role === "TEACHER") {
+
+                const result = await tx.teacher.updateMany({
+                    where: {
+                        id: profile.id,
+                        userId: null
+                    },
+                    data: {
+                        userId: newUser.id
+                    }
+                });
+
+                if (result.count !== 1) {
+                    throw new ApiError(
+                        409,
+                        "This teacher profile is already linked to an account."
+                    );
+                }
+            }
+
+            // Return the created user
+            return newUser;
+        });
+
+    } catch (error) {
+
+        // Handle unique constraint violations
+        if (error.code === "P2002") {
+            throw new ApiError(
+                409,
+                "An account with these details already exists."
+            );
+        }
+
+        throw error;
+    }
+
+    // 6. Send verification email AFTER transaction commits
+    try {
+        await sendVerificationEmail(
+            user.email,
+            emailVerifyToken
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Failed to send verification email:",
+            error
+        );
+
+        // Email delivery failed.
+        // Remove the newly created account and unlink its profile.
+        try {
+            await prisma.$transaction(async (tx) => {
+
+                // Check the role to determine which profile to unlink
+                if (user.role === "STUDENT") {
+                    await tx.student.updateMany({
+                        where: {
+                            userId: user.id
+                        },
+                        data: {
+                            userId: null
+                        }
+                    });
+                }
+
+                else if (user.role === "TEACHER") {
+                    await tx.teacher.updateMany({
+                        where: {
+                            userId: user.id
+                        },
+                        data: {
+                            userId: null
+                        }
+                    });
+                }
+
+                // Delete the newly created account
+                await tx.user.delete({
+                    where: { id: user.id }
+                });
+            });
+
+        } catch (cleanupError) {
+            console.error(
+                "Failed to clean up registration:",
+                cleanupError
+            );
+        }
+
+        throw new ApiError(
+            500,
+            "Unable to send verification email. Please try again."
+        );
+    }
+
+    // 7. Return safe user information
+    return {
+        message: "Registration successful. Please verify your email.",
+
+        user: {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            isEmailVerified: user.isEmailVerified
+        }
+    };
 }
 
 export async function verifyUserEmail({token,userAgent,ipAddress}) {

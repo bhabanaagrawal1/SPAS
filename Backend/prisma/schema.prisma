@@ -74,17 +74,18 @@ model Section {
 // STUDENT
 
 model Student {
-  id             String          @id @default(uuid())
-  studentId      String          @unique
-  name           String
-  collegeEmail   String          @unique
-  userId         String?         @unique
-  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  codingAccounts CodingAccount[]
-  sectionId      String
-  section        Section         @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  id              String           @id @default(uuid())
+  studentId       String           @unique
+  name            String
+  collegeEmail    String           @unique
+  userId          String?          @unique
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  codingAccounts  CodingAccount[]
+  sectionId       String
+  section         Section          @relation(fields: [sectionId], references: [id], onDelete: Restrict)
   academicRecords AcademicRecord[]
   cgpaPredictions CGPAPrediction[]
+  insights        StudentInsight[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -238,53 +239,83 @@ model CodingSolvedSet {
 }
 
 model AcademicRecord {
-  id                         String   @id @default(uuid())
+  id String @id @default(uuid())
 
   // References Student.id (the database UUID)
   studentDbId String
   student     Student @relation(fields: [studentDbId], references: [id], onDelete: Cascade)
 
-  semester                   Int
-  academicYear               String
+  semester     Int
+  academicYear String
 
-  previousSemesterCgpa       Float
-  previousSemesterBacklogs   Int
+  previousSemesterCgpa     Float
+  previousSemesterBacklogs Int
 
-  attendancePercentage       Float
-  totalClasses               Int
-  attendedClasses            Int
+  attendancePercentage Float
+  totalClasses         Int
+  attendedClasses      Int
 
-  internalAssessmentMarks    Float
-  midtermMarks               Float
-  quizAverage                Float
-  assignmentAverage          Float
-  assignmentSubmissionRate   Float
-  labAverage                 Float
-  projectMarks               Float
+  internalAssessmentMarks  Float
+  midtermMarks             Float
+  quizAverage              Float
+  assignmentAverage        Float
+  assignmentSubmissionRate Float
+  labAverage               Float
+  projectMarks             Float
 
-  studyHoursPerDay           Float
-  previousYearPercentage     Float
+  studyHoursPerDay       Float
+  previousYearPercentage Float
 
-  isSynthetic                Boolean  @default(false)
+  isSynthetic Boolean @default(false)
 
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([studentDbId, semester, academicYear])
   @@index([studentDbId])
 }
 
 model CGPAPrediction {
-  id                String   @id @default(uuid())
+  id String @id @default(uuid())
 
   studentDbId String
   student     Student @relation(fields: [studentDbId], references: [id], onDelete: Cascade)
 
-  predictedCgpa     Float
-  modelVersion      String
-  featuresSnapshot  Json
+  predictedCgpa    Float
+  modelVersion     String
+  featuresSnapshot Json
 
-  createdAt         DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([studentDbId, createdAt])
+}
+
+model StudentInsight {
+  id          String  @id @default(uuid())
+  studentDbId String
+  student     Student @relation(fields: [studentDbId], references: [id], onDelete: Cascade)
+
+  semester     Int
+  academicYear String
+
+  predictedCgpa   Float?
+  errorMargin     Float?
+  riskLevel       String?
+  riskScore       Float?
+  riskProbs       Json?
+  clusterId       Int?
+  clusterName     String?
+  anomalyScore    Float?
+  isAnomaly       Boolean @default(false)
+  anomalyReasons  Json?
+  recommendations Json?
+  peerGap         Json?
+  inputs          Json?
+  missingFeatures Json?
+  moduleErrors    Json?
+  modelVersion    String
+
+  createdAt DateTime @default(now())
 
   @@index([studentDbId, createdAt])
 }

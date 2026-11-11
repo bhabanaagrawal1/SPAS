@@ -6,6 +6,7 @@ import githubRoutes from "./routes/github.routes.js";
 import cookieParser from "cookie-parser";
 import { errorHandler } from "./middleware/14.errorHandler.js";
 import codingProfileRoutes from "./routes/codingProfile.routes.js";
+import insightRoutes from "./routes/insights.js";
 
 //creates Express application
 const app = express();
@@ -38,6 +39,7 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/github", githubRoutes);
 app.use("/api/coding-profiles", codingProfileRoutes);
+app.use("/api/ml/insights", insightRoutes);
 app.use(errorHandler);
 
 

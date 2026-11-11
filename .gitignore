@@ -33,6 +33,9 @@ node_modules/
 dist/
 build/
 
+
+data/*.csv
+
 # Logs
 *.log
 
