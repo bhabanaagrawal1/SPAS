@@ -63,7 +63,7 @@ function App() {
 
             <Route
               path="/overview"
-              element={<Overview />}
+              element={<Overview/>}
             />
 
             <Route

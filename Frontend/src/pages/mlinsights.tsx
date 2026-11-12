@@ -127,14 +127,14 @@ function SectionHeading({
   return (
     <div>
       <div className="flex items-center gap-2">
-        <Icon className="text-blue-600" size={21} />
-        <h2 className="font-semibold text-slate-800">
+        <Icon className="text-blue-300" size={24} />
+        <h2 className="font-semibold text-slate-800 text-[16px]">
           {title}
         </h2>
       </div>
 
       {description && (
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-[14px] text-slate-500 mt-1">
           {description}
         </p>
       )}
@@ -162,11 +162,11 @@ function MetricCard({
   badge: string;
 }) {
   const colors = {
-    blue: "bg-blue-50 text-blue-600",
-    amber: "bg-amber-50 text-amber-600",
-    violet: "bg-violet-50 text-violet-600",
-    green: "bg-emerald-50 text-emerald-600",
-    red: "bg-red-50 text-red-600",
+    blue: "bg-blue-50 text-blue-400",
+    amber: "bg-amber-50 text-amber-500",
+    violet: "bg-violet-50 text-violet-500",
+    green: "bg-emerald-50 text-emerald-500",
+    red: "bg-red-50 text-red-500",
   };
 
   return (
@@ -176,12 +176,12 @@ function MetricCard({
           <Icon size={22} />
         </div>
 
-        <span className="text-[10px] font-medium text-slate-400 bg-slate-50 px-2 py-1 rounded-full">
+        <span className="text-[12px] font-medium text-slate-400 bg-slate-50 px-2 py-1 rounded-full">
           {badge}
         </span>
       </div>
 
-      <p className="text-xs text-slate-500 mt-4">
+      <p className="text-[12px] text-slate-500 mt-4">
         {title}
       </p>
 
@@ -273,7 +273,7 @@ function RiskAnalysis({
             <span className="text-xl font-bold text-slate-800">
               {risk.score ?? "--"}
             </span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[12px] text-slate-500">
               Risk score
             </span>
           </div>
@@ -309,15 +309,15 @@ function RiskAnalysis({
       <div className="bg-slate-50 rounded-lg p-3 mt-3 flex gap-3">
         <Lightbulb
           className="text-amber-500 shrink-0"
-          size={20}
+          size={30}
         />
 
         <div>
-          <p className="text-xs font-semibold text-slate-800">
+          <p className="text-[14px] font-semibold text-slate-800">
             Predicted level: {risk.level ?? "Unavailable"}
           </p>
 
-          <p className="text-[11px] text-slate-600 mt-1">
+          <p className="text-[13px] text-slate-600 mt-1">
             {highRisk}% estimated chance of High risk.
             {why ? ` Main area to improve: ${why}` : ""}
           </p>
@@ -386,12 +386,12 @@ function Recommendations({
 
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap justify-between gap-2">
-                    <h3 className="text-xs font-semibold text-slate-800">
+                    <h3 className="text-[14px] font-semibold text-slate-800">
                       {recommendation.title}
                     </h3>
 
                     <span
-                      className={`text-[10px] px-2 py-1 rounded-full h-fit ${
+                      className={`text-[12px] px-3 py-1 rounded-full h-fit ${
                         priorityStyles[recommendation.priority]
                       }`}
                     >
@@ -399,11 +399,11 @@ function Recommendations({
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-500 leading-relaxed mt-1">
+                  <p className="text-[12px] text-slate-500 leading-relaxed mt-1/2">
                     Why: {recommendation.why}
                   </p>
 
-                  <span className="text-[10px] text-slate-400">
+                  <span className="text-[12px] text-slate-400">
                     {recommendation.category} · match{" "}
                     {Math.round(recommendation.score * 100)}%
                   </span>
@@ -416,7 +416,7 @@ function Recommendations({
 
       {gaps.length > 0 && (
         <div className="mt-5 pt-4 border-t border-slate-100">
-          <p className="text-xs font-semibold text-slate-800 mb-3">
+          <p className="text-[14px] font-semibold text-slate-800 mb-3">
             Gap vs similar peers
           </p>
 
@@ -426,12 +426,12 @@ function Recommendations({
                 key={key}
                 className="bg-slate-50 rounded-lg p-3 text-center"
               >
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[13px] text-slate-500">
                   {GAP_LABEL[key]}
                 </p>
 
                 <p
-                  className={`text-sm font-bold mt-1 ${
+                  className={`text-[16px] font-bold mt-1 ${
                     value > 0
                       ? "text-amber-600"
                       : value < 0
@@ -446,7 +446,7 @@ function Recommendations({
             ))}
           </div>
 
-          <p className="text-[10px] text-slate-400 mt-2">
+          <p className="text-[13px] text-slate-400 mt-2">
             Values are differences from the peer comparison baseline.
             Interpret positive and negative values according to the metric.
           </p>
@@ -483,17 +483,17 @@ function ClusterAnalysis({
 
       {clusterName ? (
         <>
-          <div className="mt-5 bg-violet-50 rounded-xl p-5">
-            <p className="text-xs text-violet-600">
+          <div className="mt-5 bg-blue-50 rounded-xl p-5">
+            <p className="text-[15px] text-blue-500">
               Your assigned peer group
             </p>
 
-            <h3 className="text-xl font-bold text-violet-900 mt-1">
+            <h3 className="text-xl font-bold text-blue-400 mt-1">
               {clusterName}
             </h3>
 
             {clusterId != null && (
-              <p className="text-[11px] text-violet-600 mt-2">
+              <p className="text-[11px] text-blue-600 mt-2">
                 Cluster ID: {clusterId}
               </p>
             )}
@@ -564,17 +564,17 @@ function AnomalyPanel({
             className={
               flagged ? "text-red-500" : "text-emerald-600"
             }
-            size={21}
+            size={24}
           />
 
-          <h2 className="font-semibold text-slate-800">
+          <h2 className="font-semibold text-slate-800 text-[18px]">
             Anomaly Detection
           </h2>
         </div>
 
         {anomaly && (
           <span
-            className={`text-[10px] font-semibold px-2.5 py-1 rounded-full ${
+            className={`text-[12px] font-semibold px-2.5 py-1 rounded-full ${
               flagged
                 ? "bg-red-50 text-red-700"
                 : "bg-emerald-50 text-emerald-700"
@@ -585,7 +585,7 @@ function AnomalyPanel({
         )}
       </div>
 
-      <p className="text-xs text-slate-500 mt-1">
+      <p className="text-[14px] text-slate-500 mt-1">
         Identification of unusual academic patterns
       </p>
 
@@ -628,11 +628,11 @@ function AnomalyPanel({
               />
             </div>
 
-            <h3 className="font-semibold text-slate-800 text-sm">
+            <h3 className="font-semibold text-slate-800">
               No anomalies detected
             </h3>
 
-            <p className="text-xs text-slate-500 mt-2">
+            <p className="text-[13px] text-slate-500 mt-2">
               No unusual pattern was flagged in this record.
             </p>
           </>
@@ -640,17 +640,17 @@ function AnomalyPanel({
       </div>
 
       {anomaly?.score != null && (
-        <p className="text-[10px] text-slate-400 text-center mb-3">
+        <p className="text-[12px] text-slate-400 text-center mb-3">
           Anomaly score: {anomaly.score.toFixed(4)}
         </p>
       )}
 
       <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100">
         <div className="text-center">
-          <p className="text-[10px] text-slate-500">
+          <p className="text-[12px] text-slate-500">
             Attendance
           </p>
-          <p className="text-xs font-semibold text-slate-700 mt-1">
+          <p className="text-[14px] font-semibold text-slate-700 mt-1">
             {attendance != null
               ? `${Number(attendance).toFixed(0)}%`
               : "--"}
@@ -658,19 +658,19 @@ function AnomalyPanel({
         </div>
 
         <div className="text-center">
-          <p className="text-[10px] text-slate-500">
+          <p className="text-[12px] text-slate-500">
             Backlogs
           </p>
-          <p className="text-xs font-semibold text-slate-700 mt-1">
+          <p className="text-[14px] font-semibold text-slate-700 mt-1">
             {backlogs != null ? String(backlogs) : "--"}
           </p>
         </div>
 
         <div className="text-center">
-          <p className="text-[10px] text-slate-500">
+          <p className="text-[12px] text-slate-500">
             Study hrs/day
           </p>
-          <p className="text-xs font-semibold text-slate-700 mt-1">
+          <p className="text-[14px] font-semibold text-slate-700 mt-1">
             {studyHours != null
               ? Number(studyHours).toFixed(1)
               : "--"}
@@ -817,7 +817,7 @@ function PerformanceChart({
             </ResponsiveContainer>
           </div>
 
-          <p className="text-[10px] text-slate-400 mt-2">
+          <p className="text-[13px] text-slate-400 mt-2">
             Predicted values are estimates and are not confirmed academic results.
           </p>
         </div>
@@ -889,16 +889,7 @@ export default function MLInsights() {
 
       <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-400 mb-2">
-            <span>Academic</span>
-            <ChevronRight size={13} />
-
-            <span className="text-blue-600 font-medium">
-              ML Insights
-            </span>
-          </div>
-
-          <h1 className="text-2xl md:text-3xl font-bold text-slate-900">
+          <h1 className="text-2xl md:text-3xl text-blue-300 font-bold">
             ML Insights
           </h1>
 
@@ -919,7 +910,7 @@ export default function MLInsights() {
         <button
           onClick={handleRunAnalysis}
           disabled={running || loading}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-400 text-white text-medium font-semibold hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
         >
           <RefreshCw
             size={15}
@@ -969,7 +960,7 @@ export default function MLInsights() {
 
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#E7EDFF] via-[#DCE7FF] to-[#C7D6FF] border border-blue-100">
         <div className="relative z-10 p-6 md:p-8 max-w-2xl">
-          <div className="inline-flex items-center gap-2 bg-white/70 text-blue-700 px-3 py-1.5 rounded-full text-[11px] font-semibold">
+          <div className="inline-flex items-center gap-2 bg-white/70 text-blue-300 px-3 py-1.5 rounded-full text-[12px] font-semibold">
             <Sparkles size={14} />
             AI POWERED ANALYTICS
           </div>
@@ -983,7 +974,7 @@ export default function MLInsights() {
             personalized recommendations powered by machine learning.
           </p>
 
-          <div className="flex items-center gap-2 mt-5 text-xs text-blue-800">
+          <div className="flex items-center gap-2 mt-5 text-[14px] text-blue-400">
             <BrainCircuit size={16} />
             <span>
               Powered by machine learning modules
@@ -1002,7 +993,7 @@ export default function MLInsights() {
       {/* NO INSIGHTS */}
 
       {!loading && !hasInsights && (
-        <div className="rounded-lg bg-blue-50 text-blue-800 text-xs p-4">
+        <div className="rounded-lg bg-blue-50 text-blue-400 text-xs p-4">
           {!data?.hasAcademicRecord
             ? "No academic record is available for your account yet. Please contact your faculty or administrator."
             : "No analysis result is available yet. Click Run analysis to generate your ML insights."}

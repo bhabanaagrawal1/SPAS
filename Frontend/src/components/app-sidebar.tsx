@@ -17,8 +17,8 @@ import { GalleryVerticalEndIcon, AudioLinesIcon, TerminalIcon, TerminalSquareIco
 // This is sample data.
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
+    name: "Bhabana Agrawal",
+    email: "bhabanaagrawal1111@gmail.com",
     avatar: "https://i.pinimg.com/736x/d9/7b/bb/d97bbb08017ac2309307f0822e63d082.jpg",
   },
   teams: [
@@ -100,10 +100,10 @@ const data = {
         title: "General",
         url: "/settings/general",
       },
-      {
-        title: "Billing",
-        url: "/settings/billing",
-      },
+      // {
+      //   title: "Billing",
+      //   url: "/settings/billing",
+      // },
     ],
   },
 ],
